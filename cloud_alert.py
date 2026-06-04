@@ -4,25 +4,22 @@ import requests_cache
 import pandas as pd
 import requests
 import json
-import os
 from geopy.distance import geodesic
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 # ===================================================
-# 📌 ตั้งค่าบัญชีและเกณฑ์การแจ้งเตือนภัย
+# 📌 ตั้งค่าบัญชี LINE Messaging API และเกณฑ์ตรวจเมฆ
 # ===================================================
-# ⚠️ ตรงนี้ใส่ Token ยาวๆ ที่ได้มาจากหัวข้อ Channel access token ล่างสุดของหน้าจอ LINE
+# ใช้รหัสเดิมที่คุณเคยทำไว้ในระบบแรก
 LINE_CHANNEL_ACCESS_TOKEN = "dvwYYveHRf+Ayfd03sFQJjMtUkMPjuWqVgqRuBoUBowxmQdOZ76cZ54b/AyLS0BpcINVryk825la+UmfaG2vxfmzHviq3pOszBQZZedltS8TZoiKuahWv7guTxHwyh7Or3YNyWP9QK0R443yRuTzSgdB04t89/1O/w1cDnyilFU="
 
-# ⚠️ ตรงนี้ให้เอารหัส "Your user ID" ที่คัดลอกมาจากขั้นตอนที่ 1 (ล่างสุดของหน้า LINE Developers) มาวางแทนในเครื่องหมายคำพูดครับ
+# ⚠️ ตรงนี้ให้เอารหัส "Your user ID" ที่ได้จากขั้นตอนที่ 1 มาวางแทนข้อความด้านล่างนี้ครับ
 LINE_USER_ID = "วาง_Your_user_ID_ของคุณตรงนี้" 
 
 TARGET_LAT = 12.470361     
 TARGET_LON = 99.792917     
 RADIUS_KM = 5.0            
 CLOUD_THRESHOLD = 50.0     
-
-STATE_FILE = "last_alert.json"
 
 def send_line_push(message_text):
     url = "https://api.line.me/v2/bot/message/push"
@@ -37,7 +34,7 @@ def send_line_push(message_text):
     try:
         response = requests.post(url, headers=headers, data=json.dumps(payload))
         if response.status_code == 200:
-            print("🚀 ส่งแจ้งเตือนสำเร็จ!")
+            print("🚀 ส่งแจ้งเตือนผ่าน LINE บอทสำเร็จ!")
         else:
             print(f"❌ ส่งล้มเหลว: {response.status_code} - {response.text}")
     except Exception as e:
@@ -83,7 +80,7 @@ responses = fetch_weather_data(url, params)
 current_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7)))
 current_hour = current_time.hour  
 
-alert_message = f"📊 [ทดสอบระบบ] รายงานตรวจพบเมฆ ({current_time.strftime('%H:%M')} น.)\n"
+alert_message = f"📊 [บอททำงานปกติ] รายงานตรวจพบเมฆ ({current_time.strftime('%H:%M')} น.)\n"
 alert_message += f"โซน: 2,000 - 15,000 ft (รัศมี {RADIUS_KM} กม.)\n"
 alert_message += f"เกณฑ์เตือนภัย: >= {CLOUD_THRESHOLD}%\n"
 alert_message += "----------------------------------\n"
@@ -112,5 +109,5 @@ for i, response in enumerate(responses):
         else:
             alert_message += f"✅ {location_label}: ปกติ ({target_cloud_zone:.1f}%)\n"
 
-# 📌 บังคับส่งข้อความออกทันทีเพื่อทดสอบสัญญาณท่อส่งข้อมูล
+# 📌 ปลดล็อกสั่งยิงรายงานเข้า LINE บอทของคุณทันทีรอบนี้เพื่อเช็คระบบ
 send_line_push(alert_message)
