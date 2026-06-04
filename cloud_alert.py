@@ -14,7 +14,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 LINE_CHANNEL_ACCESS_TOKEN = "dvwYYveHRf+Ayfd03sFQJjMtUkMPjuWqVgqRuBoUBowxmQdOZ76cZ54b/AyLS0BpcINVryk825la+UmfaG2vxfmzHviq3pOszBQZZedltS8TZoiKuahWv7guTxHwyh7Or3YNyWP9QK0R443yRuTzSgdB04t89/1O/w1cDnyilFU="
 
 # ⚠️ ตรงนี้ให้เอารหัส "Your user ID" ที่ได้จากขั้นตอนที่ 1 มาวางแทนข้อความด้านล่างนี้ครับ
-LINE_USER_ID = "วาง_Your_user_ID_ของคุณตรงนี้" 
+LINE_USER_ID = "Ubd5b155e64f586825a02d6556d5ad3f2" 
 
 TARGET_LAT = 12.470361     
 TARGET_LON = 99.792917     
