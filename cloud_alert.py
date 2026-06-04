@@ -95,7 +95,7 @@ responses = fetch_weather_data(url, params)
 
 alert_message = f"⚠️ [Low-frequency-Pran] รายงานตรวจพบเมฆ ({current_time.strftime('%H:%M')} น.)\n"
 alert_message += f"L: ต่ำ, M: กลาง, H: สูง (รัศมี {RADIUS_KM} กม.)\n"
-alert_message += f"เกณฑ์เตือนภัย: >= {CLOUD_THRESHOLD}%\n"
+alert_message += f"แจ้งเตือนเมื่อปริมาณเมฆ: >= {CLOUD_THRESHOLD}%\n"
 alert_message += "----------------------------------\n"
 
 alert_triggered = False
