@@ -1,0 +1,39 @@
+name: Hourly Cloud Alert Bot
+
+on:
+  push:
+    branches: [ "main" ]
+  schedule:
+    - cron: '*/15 * * * *'  # สั่งให้ทำงานเช็คค่าเมฆอัตโนมัติทุกๆ 15 นาที
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: true
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install Libraries
+      run: |
+        pip install openmeteo-requests requests-cache tenacity pandas geopy requests
+
+    - name: Run Cloud Alert Script
+      run: python cloud_alert.py
+
+    - name: Commit and Push State File
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        if [ -f last_alert.json ]; then
+          git add last_alert.json
+          git commit -m "🔄 อัปเดตประวัติรอบเวลาการแจ้งเตือนล่าสุด [Skip CI]" || echo "No changes to commit"
+          git push || echo "No changes to push"
+        fi
