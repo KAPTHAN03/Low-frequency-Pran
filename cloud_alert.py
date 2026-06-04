@@ -11,14 +11,16 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 # ===================================================
 # 📌 ตั้งค่าบัญชีและเกณฑ์การแจ้งเตือนภัย
 # ===================================================
-# ⚠️ แก้ไขจุดนี้: นำรหัสยาวๆ ที่คัดลอกมาจากขั้นตอนที่ 1 มาวางแทนข้อความในเครื่องหมายคำพูดด้านล่างนี้ครับ
-LINE_CHANNEL_ACCESS_TOKEN = "วาง_Channel_access_token_ยาวๆ_ของคุณตรงนี้"
-LINE_USER_ID = "Ubd5b155e64f586825a02d6556d5ad3f2" 
+# ⚠️ ตรงนี้ใส่ Token ยาวๆ ที่ได้มาจากหัวข้อ Channel access token ล่างสุดของหน้าจอ LINE
+LINE_CHANNEL_ACCESS_TOKEN = "dvwYYveHRf+Ayfd03sFQJjMtUkMPjuWqVgqRuBoUBowxmQdOZ76cZ54b/AyLS0BpcINVryk825la+UmfaG2vxfmzHviq3pOszBQZZedltS8TZoiKuahWv7guTxHwyh7Or3YNyWP9QK0R443yRuTzSgdB04t89/1O/w1cDnyilFU="
+
+# ⚠️ ตรงนี้ให้เอารหัส "Your user ID" ที่คัดลอกมาจากขั้นตอนที่ 1 (ล่างสุดของหน้า LINE Developers) มาวางแทนในเครื่องหมายคำพูดครับ
+LINE_USER_ID = "วาง_Your_user_ID_ของคุณตรงนี้" 
 
 TARGET_LAT = 12.470361     
 TARGET_LON = 99.792917     
 RADIUS_KM = 5.0            
-CLOUD_THRESHOLD = 50.0     # เกณฑ์แจ้งเตือนภัย 50%
+CLOUD_THRESHOLD = 50.0     
 
 STATE_FILE = "last_alert.json"
 
@@ -37,7 +39,7 @@ def send_line_push(message_text):
         if response.status_code == 200:
             print("🚀 ส่งแจ้งเตือนสำเร็จ!")
         else:
-            print(f"❌ ส่งล้มเหลว: {response.status_code}")
+            print(f"❌ ส่งล้มเหลว: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"❌ Error: {e}")
 
@@ -81,12 +83,10 @@ responses = fetch_weather_data(url, params)
 current_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7)))
 current_hour = current_time.hour  
 
-alert_message = f"📊 รายงานตรวจพบเมฆ ({current_time.strftime('%H:%M')} น.)\n"
+alert_message = f"📊 [ทดสอบระบบ] รายงานตรวจพบเมฆ ({current_time.strftime('%H:%M')} น.)\n"
 alert_message += f"โซน: 2,000 - 15,000 ft (รัศมี {RADIUS_KM} กม.)\n"
 alert_message += f"เกณฑ์เตือนภัย: >= {CLOUD_THRESHOLD}%\n"
 alert_message += "----------------------------------\n"
-
-alert_triggered = False
 
 for i, response in enumerate(responses):
     location_label = locations[i]["label"]
@@ -109,40 +109,8 @@ for i, response in enumerate(responses):
         
         if target_cloud_zone >= CLOUD_THRESHOLD:
             alert_message += f"⚠️ {location_label}: {target_cloud_zone:.1f}% (Low: {low_val:.0f}%, Mid: {mid_val:.0f}%)\n"
-            alert_triggered = True
         else:
             alert_message += f"✅ {location_label}: ปกติ ({target_cloud_zone:.1f}%)\n"
 
-should_send = False
-
-if alert_triggered:
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "r") as f:
-            state = json.load(f)
-            last_alert_str = state.get("last_alert_time")
-            last_status = state.get("was_alerting", False)
-            
-        if last_alert_str and last_status:
-            last_alert_time = datetime.datetime.fromisoformat(last_alert_str)
-            time_diff = (current_time - last_alert_time).total_seconds() / 60.0
-            
-            if time_diff >= 15.0:
-                alert_message += f"\n🔄 (แจ้งเตือนซ้ำต่อเนื่องทุก 15 นาที)"
-                should_send = True
-            else:
-                print(f"ยังไม่ครบ 15 นาที")
-        else:
-            should_send = True
-    else:
-        should_send = True
-
-    with open(STATE_FILE, "w") as f:
-        json.dump({"last_alert_time": current_time.isoformat(), "was_alerting": True}, f)
-
-else:
-    print("ท้องฟ้าปกติ")
-    with open(STATE_FILE, "w") as f:
-        json.dump({"last_alert_time": current_time.isoformat(), "was_alerting": False}, f)
-
-if should_send:
-    send_line_push(alert_message)
+# 📌 บังคับส่งข้อความออกทันทีเพื่อทดสอบสัญญาณท่อส่งข้อมูล
+send_line_push(alert_message)
