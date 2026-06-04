@@ -11,7 +11,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 # 📌 ตั้งค่าบัญชี LINE Messaging API และเกณฑ์ตรวจเมฆ
 # ===================================================
 # ใช้รหัสเดิมที่คุณเคยทำไว้ในระบบแรก
-LINE_CHANNEL_ACCESS_TOKEN = "dvwYYveHRf+Ayfd03sFQJjMtUkMPjuWqVgqRuBoUBowxmQdOZ76cZ54b/AyLS0BpcINVryk825la+UmfaG2vxfmzHviq3pOszBQZZedltS8TZoiKuahWv7guTxHwyh7Or3YNyWP9QK0R443yRuTzSgdB04t89/1O/w1cDnyilFU="
+LINE_CHANNEL_ACCESS_TOKEN = "jwuHwu0W0GBSfDCbjl22PoAOtAJLkLn/tb5UPKakL3bsU2c5cVzoWicH9aWqkNn7rZzylZjlw86vtlcbA3ggg11mAYDi45oFOHru6OXbL8Q3Oyo1HkYFdNe3oQV4louWJz1G/icXJ0LTFCmZqQk9vQdB04t89/1O/w1cDnyilFU="
 
 # ⚠️ ตรงนี้ให้เอารหัส "Your user ID" ที่ได้จากขั้นตอนที่ 1 มาวางแทนข้อความด้านล่างนี้ครับ
 LINE_USER_ID = "Ubd5b155e64f586825a02d6556d5ad3f2" 
