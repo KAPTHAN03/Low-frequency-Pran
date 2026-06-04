@@ -81,7 +81,7 @@ current_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=
 current_hour = current_time.hour  
 
 alert_message = f"📊 [Low-frequency-Pran] รายงานตรวจพบเมฆ ({current_time.strftime('%H:%M')} น.)\n"
-alert_message += f"Low : เมฆชั้นต่ำ, Mid+Hight : เมฆชั้นกลาง-ชั้นสูง (รัศมี {RADIUS_KM} กม.)\n"
+alert_message += f"Low : เมฆชั้นต่ำ, Mid+Hight : เมฆชั้นกลาง (รัศมี {RADIUS_KM} กม.)\n"
 alert_message += f"เกณฑ์เตือนภัย: >= {CLOUD_THRESHOLD}%\n"
 alert_message += "----------------------------------\n"
 
