@@ -62,10 +62,9 @@ if not (7 <= current_hour <= 19):
     print("💤 นอกช่วงเวลาปฏิบัติภารกิจ (07:00 - 19:00 น.) ระบบหยุดการทำงานชั่วคราว")
     exit()
 
-# เรียกใช้ Client ตรงๆ โดยไม่ผ่าน CachedSession เพื่อดึงค่า Real-time จริงๆ
 openmeteo = openmeteo_requests.Client()
 
-@retry(stop=stop_after_attempt(5), wait=wait_fixed(2))
+@retry(stop=stop_after_attempt(5), wait=wait_fixed(3))
 def fetch_weather_data(url, params):
     return openmeteo.weather_api(url, params=params)
 
@@ -82,6 +81,7 @@ params = {
     "forecast_days": 1
 }
 
+# เรียกข้อมูลในรอบเดียวเพื่อป้องกันการสแปมเซิร์ฟเวอร์
 responses = fetch_weather_data(url, params)
 
 alert_message = f"⚠️ [Low-frequency-Pran] รายงานตรวจพบเมฆ ({current_time.strftime('%H:%M')} น.)\n"
@@ -95,7 +95,7 @@ for i, response in enumerate(responses):
     location_label = locations[i]["label"]
     hourly = response.Hourly()
     cloud_low_values = hourly.Variables(0).ValuesAsNumpy()
-    cloud_mid_values = omnibus_mid = hourly.Variables(1).ValuesAsNumpy()
+    cloud_mid_values = hourly.Variables(1).ValuesAsNumpy()
     cloud_high_values = hourly.Variables(2).ValuesAsNumpy()
     
     time_units = hourly.Time()
@@ -122,11 +122,9 @@ for i, response in enumerate(responses):
             alert_message += f"⚠️ {location_label}: {target_cloud_zone:.1f}% (L:{low_val:.0f}%, M:{mid_val:.0f}%, H:{high_val:.0f}%)\n"
             alert_triggered = True
 
-# ===================================================
-# 🔄 เงื่อนไขที่ 2: เตือนทุกรอบที่เกินเกณฑ์ / ต่ำกว่าเกณฑ์ไม่ต้องเตือน
-# ===================================================
+# 🔄 เงื่อนไขที่ 2: หากพบเมฆหนาเกินเกณฑ์ ให้แจ้งเตือนทันที
 if alert_triggered:
-    print("⚠️ ตรวจพบเมฆเกินเกณฑ์ภัย ส่งสัญญาณเข้า LINE ทันที")
+    print("⚠️ ตรวจพบเมฆเกินเกณฑ์ภัย ส่งสัญญาณเข้า LINE")
     send_line_push(alert_message)
 else:
-    print("✅ สภาพอากาศปกติ: ไม่มีเมฆชั้นใดถึงเกณฑ์ 50% (ระบบไม่ส่งข้อความรบกวน)")
+    print("✅ สภาพอากาศปกติ: ไม่มีเมฆชั้นใดถึงเกณฑ์ 50%")
