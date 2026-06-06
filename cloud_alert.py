@@ -1,6 +1,5 @@
 import datetime
 import openmeteo_requests
-import requests_cache
 import pandas as pd
 import requests
 import json
@@ -63,9 +62,8 @@ if not (7 <= current_hour <= 19):
     print("💤 นอกช่วงเวลาปฏิบัติภารกิจ (07:00 - 19:00 น.) ระบบหยุดการทำงานชั่วคราว")
     exit()
 
-# ดึงข้อมูลสภาพอากาศจาก Open-Meteo API (เมฆชั้นต่ำ กลาง สูง)
-cache_session = requests_cache.CachedSession('.cache', expire_after=300)
-openmeteo = openmeteo_requests.Client(session=cache_session)
+# เรียกใช้ Client ตรงๆ โดยไม่ผ่าน CachedSession เพื่อดึงค่า Real-time จริงๆ
+openmeteo = openmeteo_requests.Client()
 
 @retry(stop=stop_after_attempt(5), wait=wait_fixed(2))
 def fetch_weather_data(url, params):
@@ -97,7 +95,7 @@ for i, response in enumerate(responses):
     location_label = locations[i]["label"]
     hourly = response.Hourly()
     cloud_low_values = hourly.Variables(0).ValuesAsNumpy()
-    cloud_mid_values = hourly.Variables(1).ValuesAsNumpy()
+    cloud_mid_values = omnibus_mid = hourly.Variables(1).ValuesAsNumpy()
     cloud_high_values = hourly.Variables(2).ValuesAsNumpy()
     
     time_units = hourly.Time()
@@ -118,7 +116,6 @@ for i, response in enumerate(responses):
         mid_val = current_hour_df.iloc[0]['cloud_mid']
         high_val = current_hour_df.iloc[0]['cloud_high']
         
-        # คัดเลือกค่าที่หนาแน่นที่สุดในบรรดาเมฆทั้ง 3 ชั้นมาพิจารณา
         target_cloud_zone = max(low_val, mid_val, high_val)  
         
         if target_cloud_zone >= CLOUD_THRESHOLD:
