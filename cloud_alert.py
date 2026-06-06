@@ -11,12 +11,12 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 # 📌 ตั้งค่าบัญชี LINE Messaging API และเกณฑ์ตรวจเมฆ
 # ===================================================
 LINE_CHANNEL_ACCESS_TOKEN = "jwuHwu0W0GBSfDCbjl22PoAOtAJLkLn/tb5UPKakL3bsU2c5cVzoWicH9aWqkNn7rZzylZjlw86vtlcbA3ggg11mAYDi45oFOHru6OXbL8Q3Oyo1HkYFdNe3oQV4louWJz1G/icXJ0LTFCmZqQk9vQdB04t89/1O/w1cDnyilFU="
-LINE_USER_ID = "Ubd5b155e64f586825a02d6556d5ad3f2" 
+LINE_USER_ID = "Ubd5b155e64f586825a02d6556d5ad3f2"
 
-TARGET_LAT = 12.470361     
-TARGET_LON = 99.792917     
-RADIUS_KM = 5.0            
-CLOUD_THRESHOLD = 50.0     # เกณฑ์แจ้งเตือนภัยเมฆหนาเกิน 50%
+TARGET_LAT = 12.470361
+TARGET_LON = 99.792917
+RADIUS_KM = 5.0
+CLOUD_THRESHOLD = 50.0
 
 def send_line_push(message_text):
     url = "https://api.line.me/v2/bot/message/push"
@@ -58,7 +58,7 @@ current_hour = current_time.hour
 
 print(f"⏰ เวลาปัจจุบันที่ระบบตรวจวัดได้: {current_time.strftime('%H:%M')} น.")
 
-# 🔒 เงื่อนไขที่ 1: ตรวจสอบเวลาให้อยู่ในช่วง 07:00 - 19:00 น. ตามเวลาประเทศไทย
+# 🔒 เงื่อนไขที่ 1: ตรวจสอบเวลาให้อยู่ในช่วง 07:00 - 19:00 น.
 if not (7 <= current_hour <= 19):
     print("💤 นอกช่วงเวลาปฏิบัติภารกิจ (07:00 - 19:00 น.) ระบบหยุดการทำงานชั่วคราว")
     exit()
@@ -126,7 +126,7 @@ for i, response in enumerate(responses):
             alert_triggered = True
 
 # ===================================================
-# 🔄 เงื่อนไขที่ 2: ควบคุมการแจ้งเตือน (เตือนทุกรอบที่เกินเกณฑ์ / ต่ำกว่าเกณฑ์ไม่ต้องเตือน)
+# 🔄 เงื่อนไขที่ 2: เตือนทุกรอบที่เกินเกณฑ์ / ต่ำกว่าเกณฑ์ไม่ต้องเตือน
 # ===================================================
 if alert_triggered:
     print("⚠️ ตรวจพบเมฆเกินเกณฑ์ภัย ส่งสัญญาณเข้า LINE ทันที")
