@@ -39,58 +39,10 @@ def send_line_push(message_text):
     except Exception as e:
         print(f"❌ Line Error: {e}", flush=True)
 
-# 🗺️ สร้างพิกัด: Center 1 จุด + (8 ทิศทางหลัก x ทิศละ 2 จุดตรวจที่ระยะ 2.5 กม. และ 5.0 กม.) = รวม 17 จุด
+# 🗺️ ฟังก์ชันสร้างพิกัด: พิกัดหลัก 1 จุด + (8 ทิศทางหลัก x ทิศละ 2 จุดตรวจที่ระยะ 2.5 กม. และ 5.0 กม.) = รวม 17 จุด
 def generate_radar_points(lat, lon, max_dist_km):
     center = (lat, lon)
     directions = {
         "N (เหนือ)": 0,
         "NE (ตะวันออกเฉียงเหนือ)": 45,
-        "E (ตะวันออก)": 90,
-        "SE (ตะวันออกเฉียงใต้)": 135,
-        "S (ใต้)": 180,
-        "SW (ตะวันตกเฉียงใต้)": 225,
-        "W (ตะวันตก)": 270,
-        "NW (ตะวันตกเฉียงเหนือ)": 315
-    }
-    
-    points = []
-    # 1. พิกัดจุดศูนย์กลาง
-    points.append({"lat": lat, "lon": lon, "label": "Center (พิกัดหลัก)"})
-    
-    # 2. พิกัดรอบตัว ทิศละ 2 ระยะเพื่อนำมาหาค่าเฉลี่ยพื้นที่
-    for label, bearing in directions.items():
-        dist_half = max_dist_km / 2.0
-        dest_half = geodesic(kilometers=dist_half).destination(center, bearing)
-        dest_full = geodesic(kilometers=max_dist_km).destination(center, bearing)
-        
-        points.append({"lat": dest_half.latitude, "lon": dest_half.longitude, "label": label})
-        points.append({"lat": dest_full.latitude, "lon": dest_full.longitude, "label": label})
-        
-    return points
-
-start_script_time = time.time()
-print("🤖 บอทตรวจเมฆ 8 ทิศ (สูตรคำนวณเฉลี่ย 2 จุดตรวจ/ทิศ) เริ่มทำงาน...", flush=True)
-
-while True:
-    if time.time() - start_script_time > MAX_RUN_DURATION_SEC:
-        print("🔄 ครบระยะเวลาโควตารอบใหญ่ ปิดตัวเพื่อส่งไม้ต่อรอบถัดไป", flush=True)
-        break
-
-    current_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7)))
-    current_hour = current_time.hour  
-    
-    print(f"\n🕒 รอบตรวจสอบย่อย ณ เวลา: {current_time.strftime('%H:%M:%S')} น.", flush=True)
-    
-    if 7 <= current_hour <= 19:
-        try:
-            radar_points = generate_radar_points(TARGET_LAT, TARGET_LON, RADIUS_KM)
-            
-            # แยกอาเรย์ลิตส์ของละติจูดและลองจิจูดสำหรับส่งให้ Open-Meteo API ตามคู่มือสากล
-            lats = [p["lat"] for p in radar_points]
-            lons = [p["lon"] for p in radar_points]
-            
-            url = "https://api.open-meteo.com/v1/forecast"
-            params = {
-                "latitude": lats,
-                "longitude": lons,
-                "hourly": "cloud
+        "
