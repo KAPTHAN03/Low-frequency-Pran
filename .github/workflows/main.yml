@@ -26,7 +26,7 @@ jobs:
         pip install openmeteo-requests requests-cache tenacity pandas geopy requests
 
     - name: Run Cloud Alert Script
-      run: python cloud_alert.py
+      run: python cloud_alert_v2.py
 
     - name: Commit and Push State File
       run: |
