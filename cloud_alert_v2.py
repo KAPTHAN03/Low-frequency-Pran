@@ -44,17 +44,3 @@ def send_line_push(message_text):
 # ฟังก์ชันสร้างเครือข่ายพิกัดรอบรัศมี 5 กม. เพื่อนำมาคัดแยกตามมุมองศาเรดาร์
 def generate_radar_points(lat, lon, max_dist_km):
     center = (lat, lon)
-    points = [{"lat": lat, "lon": lon, "bearing": -1, "label": "Center (พิกัดหลัก)"}]
-    
-    # สแกนพิกัดรัศมีโดยรอบทุกๆ 15 องศา เพื่อความแม่นยำในการเฉลี่ยพื้นที่
-    for b in range(0, 360, 15):
-        for d in np.linspace(1.5, max_dist_km, 3):
-            dest = geodesic(kilometers=d).destination(center, b)
-            points.append({"lat": dest.latitude, "lon": dest.longitude, "bearing": b})
-    return points
-
-def get_direction_label(bearing):
-    if bearing == -1: 
-        return "Center (พิกัดหลัก)"
-    # แบ่งช่วงองศา 8 ทิศตามมาตรฐานอุตุนิยมวิทยา
-    if (bearing >= 337.5) or (bearing < 22.5): return "N (เหนือ:
