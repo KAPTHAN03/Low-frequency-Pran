@@ -54,4 +54,7 @@ def generate_radar_points(lat, lon, max_dist_km):
     return points
 
 def get_direction_label(bearing):
-    if bearing == -
+    if bearing == -1: 
+        return "Center (พิกัดหลัก)"
+    # แบ่งช่วงองศา 8 ทิศตามมาตรฐานอุตุนิยมวิทยา
+    if (bearing >= 337.5) or (bearing < 22.5): return "N (เหนือ:
