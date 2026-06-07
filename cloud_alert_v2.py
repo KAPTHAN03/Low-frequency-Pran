@@ -39,16 +39,8 @@ def send_line_push(message_text):
 # 🗺️ สร้างพิกัด: Center 1 จุด + (8 ทิศทาง x ทิศละ 2 จุดตรวจที่ระยะ 2.5 กม. และ 5.0 กม.) = รวม 17 จุด
 def generate_radar_points(lat, lon, max_dist_km):
     center = (lat, lon)
-    directions = {
-        "N (เหนือ)": 0,
-        "NE (ตะวันออกเฉียงเหนือ)": 45,
-        "E (ตะวันออก)": 90,
-        "SE (ตะวันออกเฉียงใต้)": 135,
-        "S (ใต้)": 180,
-        "SW (ตะวันตกเฉียงใต้)": 225,
-        "W (ตะวันตก)": 270,
-        "NW (ตะวันตกเฉียงเหนือ)": 315
-    }
+    # จัดรูปโครงสร้าง Dictionary ทิศทางให้ปิดปีกกาอย่างสมบูรณ์แบบกระชับ
+    directions = {"N (เหนือ)": 0, "NE (ตะวันออกเฉียงเหนือ)": 45, "E (ตะวันออก)": 90, "SE (ตะวันออกเฉียงใต้)": 135, "S (ใต้)": 180, "SW (ตะวันตกเฉียงใต้)": 225, "W (ตะวันตก)": 270, "NW (ตะวันตกเฉียงเหนือ)": 315}
     
     points = []
     points.append({"lat": lat, "lon": lon, "label": "Center (พิกัดหลัก)"})
@@ -63,54 +55,4 @@ def generate_radar_points(lat, lon, max_dist_km):
         
     return points
 
-print("🤖 บอทตรวจเมฆ 8 ทิศ (สูตรคำนวณเฉลี่ย 2 จุดตรวจ/ทิศ) เริ่มทำงาน...", flush=True)
-
-current_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7)))
-current_hour = current_time.hour  
-
-print(f"🕒 รอบตรวจสอบ ณ เวลา: {current_time.strftime('%H:%M:%S')} น.", flush=True)
-
-if 7 <= current_hour <= 19:
-    try:
-        radar_points = generate_radar_points(TARGET_LAT, TARGET_LON, RADIUS_KM)
-        lats = [p["lat"] for p in radar_points]
-        lons = [p["lon"] for p in radar_points]
-        
-        url = "https://api.open-meteo.com/v1/forecast"
-        params = {
-            "latitude": lats,
-            "longitude": lons,
-            "hourly": "cloud_cover_low,cloud_cover_mid,cloud_cover_high,cloud_base_height",
-            "timezone": "Asia/Bangkok",
-            "forecast_days": 1
-        }
-        
-        print(f"📡 กำลังส่งคำขอชุดพิกัดเรดาร์รวม {len(radar_points)} จุด ไปยัง Open-Meteo...", flush=True)
-        resp = requests.get(url, params=params, timeout=15)
-        
-        if resp.status_code == 200:
-            data_json = resp.json()
-            
-            if isinstance(data_json, list):
-                responses_list = data_json
-            else:
-                responses_list = [data_json]
-            
-            raw_data = []
-            for idx, item in enumerate(responses_list):
-                if idx >= len(radar_points): break
-                
-                dir_label = radar_points[idx]["label"]
-                hourly = item.get("hourly", {})
-                
-                c_low_list = hourly.get("cloud_cover_low", [])
-                c_mid_list = hourly.get("cloud_cover_mid", [])
-                c_high_list = hourly.get("cloud_cover_high", [])
-                b_height_list = hourly.get("cloud_base_height", [])
-                
-                c_low = c_low_list[current_hour] if len(c_low_list) > current_hour else 0.0
-                c_mid = c_mid_list[current_hour] if len(c_mid_list) > current_hour else 0.0
-                c_high = c_high_list[current_hour] if len(c_high_list) > current_hour else 0.0
-                b_height = b_height_list[current_hour] if len(b_height_list) > current_hour else 0.0
-                
-                raw_data.append({
+print("🤖 บอทตรวจเม
