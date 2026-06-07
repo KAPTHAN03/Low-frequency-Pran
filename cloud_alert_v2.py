@@ -16,9 +16,9 @@ TARGET_LAT = 12.470361
 TARGET_LON = 99.792917
 RADIUS_KM = 5.0
 
-# 🎯 1. ปรับเกณฑ์ความหนาแน่นเมฆเป็นมากกว่า 50% ตามสั่ง
+# 🎯 ปรับเกณฑ์ความหนาแน่นเมฆเป็นมากกว่า 50%
 CLOUD_THRESHOLD = 50.0  
-STATE_FILE = "bot_state.json"
+STATE_FILE = "cloud_radar_state.json"
 
 def send_line_push(message_text):
     url = "https://api.line.me/v2/bot/message/push"
@@ -37,15 +37,20 @@ def load_previous_state():
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r") as f:
-                return json.load(f)
-        except:
+                state_data = json.load(f)
+                print(f"📦 Loaded existing state file. Last alert triggered: {state_data.get('last_alert_triggered')}", flush=True)
+                return state_data
+        except Exception as e:
+            print(f"⚠️ State file corrupted, initializing default state. Error: {e}", flush=True)
             return {"last_alert_triggered": False}
+    print("ℹ️ No previous state file found. This is a fresh run.", flush=True)
     return {"last_alert_triggered": False}
 
 def save_current_state(state):
     try:
         with open(STATE_FILE, "w") as f:
             json.dump(state, f)
+        print(f"💾 Current state updated and saved to {STATE_FILE}", flush=True)
     except Exception as e:
         print(f"⚠️ Cannot save state file: {e}", flush=True)
 
@@ -63,9 +68,15 @@ def generate_radar_points(lat, lon, max_dist_km):
 print("🤖 Cloud Radar Bot Monitoring Started...", flush=True)
 current_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7)))
 current_hour = current_time.hour  
-print(f"🕒 Check active at: {current_time.strftime('%H:%M:%S')}", flush=True)
+print(f"🕒 Current Local Time: {current_time.strftime('%Y-%m-%d %H:%M:%S')} (Hour: {current_hour})", flush=True)
 
-if 7 <= current_hour <= 19:
+# 🛠️ ตรวจสอบเงื่อนไขว่ารันแบบ Manual หรือรันในช่วงเวลาทำงานปกติ (07:00 - 19:00)
+is_manual_run = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch" or os.environ.get("GITHUB_WORKFLOW") is not None
+
+if 7 <= current_hour <= 19 or is_manual_run:
+    if is_manual_run and not (7 <= current_hour <= 19):
+        print("⚡ Manual Run detected outside regular hours. Bypassing time window lock!", flush=True)
+        
     try:
         radar_points = generate_radar_points(TARGET_LAT, TARGET_LON, RADIUS_KM)
         lats = [p["lat"] for p in radar_points]
@@ -114,33 +125,37 @@ if 7 <= current_hour <= 19:
             heavy_cloud_detected = False
             direction_order = ["Center", "N", "NE", "E", "SE", "S", "SW", "W", "NW"]
             
+            print("📊 Current Cloud Density Breakdown:", flush=True)
             for target_dir in direction_order:
                 row = df_summary[df_summary["direction"] == target_dir]
                 if row.empty: continue
                 
                 low_val, mid_val, high_val = row.iloc[0]["low"], row.iloc[0]["mid"], row.iloc[0]["high"]
+                max_cloud = max(low_val, mid_val, high_val)
+                print(f"   -> Direction {target_dir}: Max Cloud = {max_cloud:.0f}% (L:{low_val:.0f}%, M:{mid_val:.0f}%, H:{high_val:.0f}%)", flush=True)
                 
-                # ตรวจสอบเกณฑ์เมฆหนาแน่นมากกว่า 50%
-                if max(low_val, mid_val, high_val) > CLOUD_THRESHOLD:
+                if max_cloud > CLOUD_THRESHOLD:
                     alert_message += f"⚠️ Direction: {target_dir}\n"
                     alert_message += f"   [L: Low Cloud: {low_val:.0f}%]\n"
                     alert_message += f"   [M: Mid Cloud: {mid_val:.0f}%]\n"
                     alert_message += f"   [H: High Cloud: {high_val:.0f}%]\n"
                     heavy_cloud_detected = True
 
-            # 🛠️ ตรวจสอบประวัติการแจ้งเตือน
+            # 🛠️ ตรวจสอบสถานะการแจ้งเตือนรอบแรก
             prev_state = load_previous_state()
             already_alerted = prev_state.get("last_alert_triggered", False)
             
+            print(f"🔍 Evaluated Result -> Heavy cloud detected: {heavy_cloud_detected}, Already alerted: {already_alerted}", flush=True)
+            
             if heavy_cloud_detected:
                 if not already_alerted:
-                    print("⚠️ Heavy cloud detected for the FIRST time! Sending alert...", flush=True)
+                    print("⚠️ Heavy cloud detected for the FIRST time! Sending alert to LINE...", flush=True)
                     send_line_push(alert_message)
                     save_current_state({"last_alert_triggered": True})
                 else:
-                    print("ℹ️ Heavy cloud still persists. Alert already sent. Skipping.", flush=True)
+                    print("ℹ️ Heavy cloud still persists, but alert was already dispatched. Skipping to avoid spam.", flush=True)
             else:
-                print("✅ Skies clear or cloud below 50%. Resetting trigger state.", flush=True)
+                print("✅ Skies clear or clouds are below 50%. Resetting trigger state for next formations.", flush=True)
                 save_current_state({"last_alert_triggered": False})
                 
         else:
@@ -148,6 +163,6 @@ if 7 <= current_hour <= 19:
     except Exception as e:
         print(f"❌ Processing Error: {e}", flush=True)
 else:
-    print("💤 Outside operational hours (07:00 - 19:00). Standby.", flush=True)
+    print(f"💤 Current time ({current_time.strftime('%H:%M')}) is outside operational hours (07:00 - 19:00). Standby.", flush=True)
 
 print("🏁 Job Completed.")
