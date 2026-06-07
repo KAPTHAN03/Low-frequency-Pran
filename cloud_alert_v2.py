@@ -14,7 +14,7 @@ LINE_USER_ID = "Ubd5b155e64f586825a02d6556d5ad3f2"
 TARGET_LAT = 12.470361
 TARGET_LON = 99.792917
 RADIUS_KM = 5.0
-CLOUD_THRESHOLD = 0.0  # 0.0 เพื่อบังคับให้ไลน์รายงานครบทุกทิศทันทีในการทดสอบระบบ
+CLOUD_THRESHOLD = 0.0
 
 def send_line_push(message_text):
     url = "https://api.line.me/v2/bot/message/push"
@@ -29,7 +29,6 @@ def send_line_push(message_text):
     except Exception as e:
         print(f"❌ Line Error: {e}", flush=True)
 
-# 🗺️ สร้างพิกัด: Center 1 จุด + (8 ทิศทาง x ทิศละ 2 จุดตรวจที่ระยะ 2.5 กม. และ 5.0 กม.) = รวม 17 จุด
 def generate_radar_points(lat, lon, max_dist_km):
     center = (lat, lon)
     directions = {"N (เหนือ)": 0, "NE (ตะวันออกเฉียงเหนือ)": 45, "E (ตะวันออก)": 90, "SE (ตะวันออกเฉียงใต้)": 135, "S (ใต้)": 180, "SW (ตะวันตกเฉียงใต้)": 225, "W (ตะวันตก)": 270, "NW (ตะวันตกเฉียงเหนือ)": 315}
@@ -75,16 +74,13 @@ if 7 <= current_hour <= 19:
                 dir_label = radar_points[idx]["label"]
                 hourly = item.get("hourly", {})
                 
-                # ดึงค่าตามชั่วโมงปัจจุบันแบบปลอดภัย (Safe Get List)
                 c_low = hourly.get("cloud_cover_low", [0.0]*24)[current_hour]
                 c_mid = hourly.get("cloud_cover_mid", [0.0]*24)[current_hour]
                 c_high = hourly.get("cloud_cover_high", [0.0]*24)[current_hour]
                 b_height = hourly.get("cloud_base_height", [0.0]*24)[current_hour]
                 
-                # 💡 แก้ไขจุดนี้: ยุบปีกกาแถวเดียวเพื่อป้องกันข้อผิดพลาดตอนก๊อปปี้วางไฟล์
                 raw_data.append({"direction": dir_label, "low": float(c_low or 0.0), "mid": float(c_mid or 0.0), "high": float(c_high or 0.0), "base_m": float(b_height if (b_height is not None and not np.isnan(b_height)) else 0.0)})
             
-            # ยุบกลุ่มหาค่าเฉลี่ยทางสถิติรายทิศทาง
             df_summary = pd.DataFrame(raw_data).groupby("direction").mean().reset_index()
             
             alert_message = f"⚠️ [Low-frequency-Pran] รายงานกลุ่มเมฆเฉลี่ย 2 จุด/ทิศ ({current_time.strftime('%H:%M')} น.)\n"
