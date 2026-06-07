@@ -48,38 +48,42 @@ print(f"🕒 Check active at: {current_time.strftime('%H:%M:%S')}", flush=True)
 if 7 <= current_hour <= 19:
     try:
         radar_points = generate_radar_points(TARGET_LAT, TARGET_LON, RADIUS_KM)
-        lats = [p["lat"] for p in radar_points]
-        lons = [p["lon"] for p in radar_points]
+        raw_data = []
         
-        url = "https://api.open-meteo.com/v1/forecast"
-        params = {
-            "latitude": lats,
-            "longitude": lons,
-            "hourly": "cloud_cover_low,cloud_cover_mid,cloud_cover_high,cloud_base_height",
-            "timezone": "Asia/Bangkok",
-            "forecast_days": 1
-        }
+        print(f"📡 Querying {len(radar_points)} points individually to prevent API corruption...", flush=True)
         
-        print(f"📡 Requesting {len(radar_points)} points from Open-Meteo...", flush=True)
-        resp = requests.get(url, params=params, timeout=15)
-        
-        if resp.status_code == 200:
-            data_json = resp.json()
-            responses_list = data_json if isinstance(data_json, list) else [data_json]
+        # วนลูปดึงข้อมูลทีละพิกัดเพื่อความชัวร์และรองรับ cloud_base_height ครบทุกจุด
+        for p in radar_points:
+            url = "https://api.open-meteo.com/v1/forecast"
+            params = {
+                "latitude": p["lat"],
+                "longitude": p["lon"],
+                "hourly": "cloud_cover_low,cloud_cover_mid,cloud_cover_high,cloud_base_height",
+                "timezone": "Asia/Bangkok",
+                "forecast_days": 1
+            }
             
-            raw_data = []
-            for idx, item in enumerate(responses_list):
-                if idx >= len(radar_points): break
-                dir_label = radar_points[idx]["label"]
-                hourly = item.get("hourly", {})
+            resp = requests.get(url, params=params, timeout=10)
+            if resp.status_code == 200:
+                data_json = resp.json()
+                hourly = data_json.get("hourly", {})
                 
                 c_low = hourly.get("cloud_cover_low", [0.0]*24)[current_hour]
                 c_mid = hourly.get("cloud_cover_mid", [0.0]*24)[current_hour]
                 c_high = hourly.get("cloud_cover_high", [0.0]*24)[current_hour]
                 b_height = hourly.get("cloud_base_height", [0.0]*24)[current_hour]
                 
-                raw_data.append({"direction": dir_label, "low": float(c_low or 0.0), "mid": float(c_mid or 0.0), "high": float(c_high or 0.0), "base_m": float(b_height if (b_height is not None and not np.isnan(b_height)) else 0.0)})
-            
+                raw_data.append({
+                    "direction": p["label"],
+                    "low": float(c_low or 0.0),
+                    "mid": float(c_mid or 0.0),
+                    "high": float(c_high or 0.0),
+                    "base_m": float(b_height if (b_height is not None and not np.isnan(b_height)) else 0.0)
+                })
+            else:
+                print(f"⚠️ Skip point {p['label']} due to API status {resp.status_code}", flush=True)
+        
+        if len(raw_data) > 0:
             df_summary = pd.DataFrame(raw_data).groupby("direction").mean().reset_index()
             
             time_str = current_time.strftime('%H:%M')
@@ -95,7 +99,7 @@ if 7 <= current_hour <= 19:
                 if row.empty: continue
                 
                 low_val, mid_val, high_val, base_m_val = row.iloc[0]["low"], row.iloc[0]["mid"], row.iloc[0]["high"], row.iloc[0]["base_m"]
-                cloud_base_ft_str = "No Cloud" if base_m_val <= 0 else f"{int(round(base_m_val * 3.28084)): patches} ft"
+                cloud_base_ft_str = "No Cloud" if base_m_val <= 0 else f"{int(round(base_m_val * 3.28084)):,} ft"
                 
                 if max(low_val, mid_val, high_val) >= CLOUD_THRESHOLD:
                     alert_message += f"⚠️ Direction: {target_dir}\n"
@@ -110,7 +114,8 @@ if 7 <= current_hour <= 19:
             else:
                 print("✅ Clear Skies: Below threshold", flush=True)
         else:
-            print(f"❌ API Error: {resp.status_code} - {resp.text}", flush=True)
+            print("❌ No data fetched from API successfully.", flush=True)
+            
     except Exception as e:
         print(f"❌ Processing Error: {e}", flush=True)
 else:
