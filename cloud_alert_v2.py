@@ -6,7 +6,7 @@ import pandas as pd
 from geopy.distance import geodesic
 
 # ===================================================
-# 📌 ตั้งค่าบัญชี LINE Messaging API และเกณฑ์ตรวจเมฆ
+# 📌 LINE API & CONFIGURATION
 # ===================================================
 LINE_CHANNEL_ACCESS_TOKEN = "jwuHwu0W0GBSfDCbjl22PoAOtAJLkLn/tb5UPKakL3bsU2c5cVzoWicH9aWqkNn7rZzylZjlw86vtlcbA3ggg11mAYDi45oFOHru6OXbL8Q3Oyo1HkYFdNe3oQV4louWJz1G/icXJ0LTFCmZqQk9vQdB04t89/1O/w1cDnyilFU="
 LINE_USER_ID = "Ubd5b155e64f586825a02d6556d5ad3f2"
@@ -23,17 +23,16 @@ def send_line_push(message_text):
     try:
         response = requests.post(url, headers=headers, data=json.dumps(payload))
         if response.status_code == 200:
-            print("🚀 ส่งแจ้งเตือนพิกัดเข้า LINE สำเร็จ!", flush=True)
+            print("🚀 LINE notification sent successfully!", flush=True)
         else:
-            print(f"❌ ส่งไลน์ล้มเหลว: {response.status_code} - {response.text}", flush=True)
+            print(f"❌ LINE failed: {response.status_code} - {response.text}", flush=True)
     except Exception as e:
-        print(f"❌ Line Error: {e}", flush=True)
+        print(f"❌ LINE Error: {e}", flush=True)
 
 def generate_radar_points(lat, lon, max_dist_km):
     center = (lat, lon)
-    directions = {"N (เหนือ)": 0, "NE (ตะวันออกเฉียงเหนือ)": 45, "E (ตะวันออก)": 90, "SE (ตะวันออกเฉียงใต้)": 135, "S (ใต้)": 180, "SW (ตะวันตกเฉียงใต้)": 225, "W (ตะวันตก)": 270, "NW (ตะวันตกเฉียงเหนือ)": 315}
-    
-    points = [{"lat": lat, "lon": lon, "label": "Center (พิกัดหลัก)"}]
+    directions = {"N": 0, "NE": 45, "E": 90, "SE": 135, "S": 180, "SW": 225, "W": 270, "NW": 315}
+    points = [{"lat": lat, "lon": lon, "label": "Center"}]
     for label, bearing in directions.items():
         dest_half = geodesic(kilometers=max_dist_km / 2.0).destination(center, bearing)
         dest_full = geodesic(kilometers=max_dist_km).destination(center, bearing)
@@ -41,10 +40,10 @@ def generate_radar_points(lat, lon, max_dist_km):
         points.append({"lat": dest_full.latitude, "lon": dest_full.longitude, "label": label})
     return points
 
-print("🤖 บอทตรวจเมฆ 8 ทิศ เริ่มทำงาน...", flush=True)
+print("🤖 Cloud Radar Bot Monitoring Started...", flush=True)
 current_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7)))
 current_hour = current_time.hour  
-print(f"🕒 รอบตรวจสอบ ณ เวลา: {current_time.strftime('%H:%M:%S')} น.", flush=True)
+print(f"🕒 Check active at: {current_time.strftime('%H:%M:%S')}", flush=True)
 
 if 7 <= current_hour <= 19:
     try:
@@ -61,7 +60,7 @@ if 7 <= current_hour <= 19:
             "forecast_days": 1
         }
         
-        print(f"📡 กำลังส่งคำขอชุดพิกัดเรดาร์รวม {len(radar_points)} จุด ไปยัง Open-Meteo...", flush=True)
+        print(f"📡 Requesting {len(radar_points)} points from Open-Meteo...", flush=True)
         resp = requests.get(url, params=params, timeout=15)
         
         if resp.status_code == 200:
@@ -83,37 +82,38 @@ if 7 <= current_hour <= 19:
             
             df_summary = pd.DataFrame(raw_data).groupby("direction").mean().reset_index()
             
-            alert_message = f"⚠️ [Low-frequency-Pran] รายงานกลุ่มเมฆเฉลี่ย 2 จุด/ทิศ ({current_time.strftime('%H:%M')} น.)\n"
-            alert_message += f"เกณฑ์กำหนด: >= {CLOUD_THRESHOLD}% (รัศมี {RADIUS_KM} กม.)\n"
+            time_str = current_time.strftime('%H:%M')
+            alert_message = f"⚠️ [Low-frequency-Pran] Cloud Radar Report ({time_str})\n"
+            alert_message += f"Threshold: >= {CLOUD_THRESHOLD}% (Radius {RADIUS_KM} km)\n"
             alert_message += "----------------------------------\n"
             
             alert_triggered = False
-            direction_order = ["Center (พิกัดหลัก)", "N (เหนือ)", "NE (ตะวันออกเฉียงเหนือ)", "E (ตะวันออก)", "SE (ตะวันออกเฉียงใต้)", "S (ใต้)", "SW (ตะวันตกเฉียงใต้)", "W (ตะวันตก)", "NW (ตะวันตกเฉียงเหนือ)"]
+            direction_order = ["Center", "N", "NE", "E", "SE", "S", "SW", "W", "NW"]
             
             for target_dir in direction_order:
                 row = df_summary[df_summary["direction"] == target_dir]
                 if row.empty: continue
                 
                 low_val, mid_val, high_val, base_m_val = row.iloc[0]["low"], row.iloc[0]["mid"], row.iloc[0]["high"], row.iloc[0]["base_m"]
-                cloud_base_ft_str = "ไม่มีเมฆ" if base_m_val <= 0 else f"{int(round(base_m_val * 3.28084)):,} ft"
+                cloud_base_ft_str = "No Cloud" if base_m_val <= 0 else f"{int(round(base_m_val * 3.28084)): patches} ft"
                 
                 if max(low_val, mid_val, high_val) >= CLOUD_THRESHOLD:
-                    alert_message += f"⚠️ {target_dir}:\n"
-                    alert_message += f"   [L: ต่ำ (ฐานเมฆเฉลี่ย: {cloud_base_ft_str}): {low_val:.0f}%]\n"
-                    alert_message += f"   [M: กลาง (6,500-20,000 ft): {mid_val:.0f}%]\n"
-                    alert_message += f"   [H: สูง (20,000 ft ขึ้นไป): {high_val:.0f}%]\n"
+                    alert_message += f"⚠️ Direction: {target_dir}\n"
+                    alert_message += f"   [L: Low (Base: {cloud_base_ft_str}): {low_val:.0f}%]\n"
+                    alert_message += f"   [M: Mid (6.5k-20k ft): {mid_val:.0f}%]\n"
+                    alert_message += f"   [H: High (20k ft+): {high_val:.0f}%]\n"
                     alert_triggered = True
             
             if alert_triggered:
-                print("⚠️ ประมวลผลเสร็จสิ้น! กำลังส่งข้อมูลเข้า LINE...", flush=True)
+                print("⚠️ Processing complete! Sending to LINE...", flush=True)
                 send_line_push(alert_message)
             else:
-                print("✅ สภาพอากาศปกติ: เมฆต่ำกว่าเกณฑ์ทั้งหมด", flush=True)
+                print("✅ Clear Skies: Below threshold", flush=True)
         else:
             print(f"❌ API Error: {resp.status_code} - {resp.text}", flush=True)
     except Exception as e:
-        print(f"❌ เกิดข้อผิดพลาดในระบบตรวจวัด: {e}", flush=True)
+        print(f"❌ Processing Error: {e}", flush=True)
 else:
-    print("💤 นอกช่วงเวลาปฏิบัติภารกิจ (07:00 - 19:00 น.) ระบบปิดตัวเองอัตโนมัติ", flush=True)
+    print("💤 Outside operational hours (07:00 - 19:00). Standby.", flush=True)
 
-print("🏁 ทำงานเสร็จสิ้น ปิด Job เรียบร้อย")
+print("🏁 Job Completed.")
