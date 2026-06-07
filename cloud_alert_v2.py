@@ -1,44 +1,168 @@
-name: Hourly Cloud Alert Bot
+import datetime
+import requests
+import json
+import os
+import numpy as np
+import pandas as pd
+from geopy.distance import geodesic
 
-on:
-  schedule:
-    # ⏱️ รันอัตโนมัติทุก 1 ชั่วโมง (นาทีที่ 0)
-    - cron: '0 * * * *'
-  workflow_dispatch: # ปุ่มกด Manual Run
+# ===================================================
+# 📌 LINE API & CONFIGURATION
+# ===================================================
+LINE_CHANNEL_ACCESS_TOKEN = "jwuHwu0W0GBSfDCbjl22PoAOtAJLkLn/tb5UPKakL3bsU2c5cVzoWicH9aWqkNn7rZzylZjlw86vtlcbA3ggg11mAYDi45oFOHru6OXbL8Q3Oyo1HkYFdNe3oQV4louWJz1G/icXJ0LTFCmZqQk9vQdB04t89/1O/w1cDnyilFU="
+LINE_USER_ID = "Ubd5b155e64f586825a02d6556d5ad3f2"
 
-jobs:
-  run-bot:
-    runs-on: ubuntu-latest
+TARGET_LAT = 12.470361
+TARGET_LON = 99.792917
+RADIUS_KM = 5.0
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: true
+# 🎯 ปรับเกณฑ์ความหนาแน่นเมฆเป็นมากกว่า 50%
+CLOUD_THRESHOLD = 50.0  
+STATE_FILE = "cloud_radar_state.json"
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+def send_line_push(message_text):
+    url = "https://api.line.me/v2/bot/message/push"
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
+    payload = {"to": LINE_USER_ID, "messages": [{"type": "text", "text": message_text}]}
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        if response.status_code == 200:
+            print("🚀 LINE notification sent successfully!", flush=True)
+        else:
+            print(f"❌ LINE failed: {response.status_code} - {response.text}", flush=True)
+    except Exception as e:
+        print(f"❌ LINE Error: {e}", flush=True)
 
-      - name: Install Libraries
-        run: |
-          pip install openmeteo-requests requests-cache tenacity pandas geopy requests
+def load_previous_state():
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f:
+                state_data = json.load(f)
+                print(f"📦 Loaded existing state file. Last alert triggered: {state_data.get('last_alert_triggered')}", flush=True)
+                return state_data
+        except Exception as e:
+            print(f"⚠️ State file corrupted, initializing default state. Error: {e}", flush=True)
+            return {"last_alert_triggered": False}
+    print("ℹ️ No previous state file found. This is a fresh run.", flush=True)
+    return {"last_alert_triggered": False}
 
-      - name: Run Cloud Alert Script
-        # ⚡ จุดสำคัญ: บังคับฉีดข้อมูลสภาพแวดล้อมระบบส่งต่อไปยัง Python
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          GITHUB_WORKFLOW: ${{ github.workflow }}
-        run: python cloud_alert_v2.py
+def save_current_state(state):
+    try:
+        with open(STATE_FILE, "w") as f:
+            json.dump(state, f)
+        print(f"💾 Current state updated and saved to {STATE_FILE}", flush=True)
+    except Exception as e:
+        print(f"⚠️ Cannot save state file: {e}", flush=True)
 
-      - name: Commit and Push State File
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          if [ -f cloud_radar_state.json ]; then
-            git add cloud_radar_state.json
-            git commit -m "🤖 [Automated] Update cloud radar state memory [Skip CI]" || echo "No changes to commit"
-            git push || echo "No changes to push"
-          fi
+def generate_radar_points(lat, lon, max_dist_km):
+    center = (lat, lon)
+    directions = {"N": 0, "NE": 45, "E": 90, "SE": 135, "S": 180, "SW": 225, "W": 270, "NW": 315}
+    points = [{"lat": lat, "lon": lon, "label": "Center"}]
+    for label, bearing in directions.items():
+        dest_half = geodesic(kilometers=max_dist_km / 2.0).destination(center, bearing)
+        dest_full = geodesic(kilometers=max_dist_km).destination(center, bearing)
+        points.append({"lat": dest_half.latitude, "lon": dest_half.longitude, "label": label})
+        points.append({"lat": dest_full.latitude, "lon": dest_full.longitude, "label": label})
+    return points
+
+print("🤖 Cloud Radar Bot Monitoring Started...", flush=True)
+current_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7)))
+current_hour = current_time.hour  
+print(f"🕒 Current Local Time: {current_time.strftime('%Y-%m-%d %H:%M:%S')} (Hour: {current_hour})", flush=True)
+
+# 🛠️ ตรวจสอบเงื่อนไขว่ารันแบบ Manual หรือรันในช่วงเวลาทำงานปกติ (07:00 - 19:00)
+is_manual_run = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch" or os.environ.get("GITHUB_WORKFLOW") is not None
+
+if 7 <= current_hour <= 19 or is_manual_run:
+    if is_manual_run and not (7 <= current_hour <= 19):
+        print("⚡ Manual Run detected outside regular hours. Bypassing time window lock!", flush=True)
+        
+    try:
+        radar_points = generate_radar_points(TARGET_LAT, TARGET_LON, RADIUS_KM)
+        lats = [p["lat"] for p in radar_points]
+        lons = [p["lon"] for p in radar_points]
+        
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": lats,
+            "longitude": lons,
+            "hourly": "cloud_cover_low,cloud_cover_mid,cloud_cover_high",
+            "timezone": "Asia/Bangkok",
+            "forecast_days": 1
+        }
+        
+        print(f"📡 Requesting ALL {len(radar_points)} points in ONE single batch...", flush=True)
+        resp = requests.get(url, params=params, timeout=15)
+        
+        if resp.status_code == 200:
+            data_json = resp.json()
+            responses_list = data_json if isinstance(data_json, list) else [data_json]
+            
+            raw_data = []
+            for idx, item in enumerate(responses_list):
+                if idx >= len(radar_points): break
+                dir_label = radar_points[idx]["label"]
+                hourly = item.get("hourly", {})
+                
+                c_low = hourly.get("cloud_cover_low", [0.0]*24)[current_hour]
+                c_mid = hourly.get("cloud_cover_mid", [0.0]*24)[current_hour]
+                c_high = hourly.get("cloud_cover_high", [0.0]*24)[current_hour]
+                
+                raw_data.append({
+                    "direction": dir_label,
+                    "low": float(c_low or 0.0),
+                    "mid": float(c_mid or 0.0),
+                    "high": float(c_high or 0.0)
+                })
+            
+            df_summary = pd.DataFrame(raw_data).groupby("direction").mean().reset_index()
+            
+            time_str = current_time.strftime('%H:%M')
+            alert_message = f"⚠️ [Low-frequency-Pran] Heavy Cloud Alert (>50%) ({time_str})\n"
+            alert_message += f"Threshold: > {CLOUD_THRESHOLD}% (Radius {RADIUS_KM} km)\n"
+            alert_message += "----------------------------------\n"
+            
+            heavy_cloud_detected = False
+            direction_order = ["Center", "N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+            
+            print("📊 Current Cloud Density Breakdown:", flush=True)
+            for target_dir in direction_order:
+                row = df_summary[df_summary["direction"] == target_dir]
+                if row.empty: continue
+                
+                low_val, mid_val, high_val = row.iloc[0]["low"], row.iloc[0]["mid"], row.iloc[0]["high"]
+                max_cloud = max(low_val, mid_val, high_val)
+                print(f"   -> Direction {target_dir}: Max Cloud = {max_cloud:.0f}% (L:{low_val:.0f}%, M:{mid_val:.0f}%, H:{high_val:.0f}%)", flush=True)
+                
+                if max_cloud > CLOUD_THRESHOLD:
+                    alert_message += f"⚠️ Direction: {target_dir}\n"
+                    alert_message += f"   [L: Low Cloud: {low_val:.0f}%]\n"
+                    alert_message += f"   [M: Mid Cloud: {mid_val:.0f}%]\n"
+                    alert_message += f"   [H: High Cloud: {high_val:.0f}%]\n"
+                    heavy_cloud_detected = True
+
+            # 🛠️ ตรวจสอบสถานะการแจ้งเตือนรอบแรก
+            prev_state = load_previous_state()
+            already_alerted = prev_state.get("last_alert_triggered", False)
+            
+            print(f"🔍 Evaluated Result -> Heavy cloud detected: {heavy_cloud_detected}, Already alerted: {already_alerted}", flush=True)
+            
+            if heavy_cloud_detected:
+                if not already_alerted:
+                    print("⚠️ Heavy cloud detected for the FIRST time! Sending alert to LINE...", flush=True)
+                    send_line_push(alert_message)
+                    save_current_state({"last_alert_triggered": True})
+                else:
+                    print("ℹ️ Heavy cloud still persists, but alert was already dispatched. Skipping to avoid spam.", flush=True)
+            else:
+                print("✅ Skies clear or clouds are below 50%. Resetting trigger state for next formations.", flush=True)
+                save_current_state({"last_alert_triggered": False})
+                
+        else:
+            print(f"❌ API Error: {resp.status_code} - {resp.text}", flush=True)
+    except Exception as e:
+        print(f"❌ Processing Error: {e}", flush=True)
+else:
+    print(f"💤 Current time ({current_time.strftime('%H:%M')}) is outside operational hours (07:00 - 19:00). Standby.", flush=True)
+
+print("🏁 Job Completed.")
