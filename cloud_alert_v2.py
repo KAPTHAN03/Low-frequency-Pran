@@ -15,7 +15,9 @@ LINE_USER_ID = "Ubd5b155e64f586825a02d6556d5ad3f2"
 TARGET_LAT = 12.470361
 TARGET_LON = 99.792917
 RADIUS_KM = 5.0
-CLOUD_THRESHOLD = 0.0
+
+# 🎯 1. ปรับเกณฑ์ความหนาแน่นเมฆเป็นมากกว่า 50% ตามสั่ง
+CLOUD_THRESHOLD = 50.0  
 STATE_FILE = "bot_state.json"
 
 def send_line_push(message_text):
@@ -105,11 +107,11 @@ if 7 <= current_hour <= 19:
             df_summary = pd.DataFrame(raw_data).groupby("direction").mean().reset_index()
             
             time_str = current_time.strftime('%H:%M')
-            alert_message = f"⚠️ [Low-frequency-Pran] Initial Cloud Detection ({time_str})\n"
-            alert_message += f"Threshold: >= {CLOUD_THRESHOLD}% (Radius {RADIUS_KM} km)\n"
+            alert_message = f"⚠️ [Low-frequency-Pran] Heavy Cloud Alert (>50%) ({time_str})\n"
+            alert_message += f"Threshold: > {CLOUD_THRESHOLD}% (Radius {RADIUS_KM} km)\n"
             alert_message += "----------------------------------\n"
             
-            any_cloud_detected = False
+            heavy_cloud_detected = False
             direction_order = ["Center", "N", "NE", "E", "SE", "S", "SW", "W", "NW"]
             
             for target_dir in direction_order:
@@ -118,26 +120,27 @@ if 7 <= current_hour <= 19:
                 
                 low_val, mid_val, high_val = row.iloc[0]["low"], row.iloc[0]["mid"], row.iloc[0]["high"]
                 
-                if max(low_val, mid_val, high_val) >= CLOUD_THRESHOLD:
+                # ตรวจสอบเกณฑ์เมฆหนาแน่นมากกว่า 50%
+                if max(low_val, mid_val, high_val) > CLOUD_THRESHOLD:
                     alert_message += f"⚠️ Direction: {target_dir}\n"
                     alert_message += f"   [L: Low Cloud: {low_val:.0f}%]\n"
-                    alert_message += f"   [M: Mid Cloud (6.5k-20k ft): {mid_val:.0f}%]\n"
-                    alert_message += f"   [H: High Cloud (20k ft+): {high_val:.0f}%]\n"
-                    any_cloud_detected = True
+                    alert_message += f"   [M: Mid Cloud: {mid_val:.0f}%]\n"
+                    alert_message += f"   [H: High Cloud: {high_val:.0f}%]\n"
+                    heavy_cloud_detected = True
 
-            # 🛠️ State Validation Checklist
+            # 🛠️ ตรวจสอบประวัติการแจ้งเตือน
             prev_state = load_previous_state()
             already_alerted = prev_state.get("last_alert_triggered", False)
             
-            if any_cloud_detected:
+            if heavy_cloud_detected:
                 if not already_alerted:
-                    print("⚠️ Cloud detected for the FIRST time! Sending alert...", flush=True)
+                    print("⚠️ Heavy cloud detected for the FIRST time! Sending alert...", flush=True)
                     send_line_push(alert_message)
                     save_current_state({"last_alert_triggered": True})
                 else:
-                    print("ℹ️ Cloud still persists, but alert already sent previously. Skipping.", flush=True)
+                    print("ℹ️ Heavy cloud still persists. Alert already sent. Skipping.", flush=True)
             else:
-                print("✅ Skies clear. Resetting trigger state for next formations.", flush=True)
+                print("✅ Skies clear or cloud below 50%. Resetting trigger state.", flush=True)
                 save_current_state({"last_alert_triggered": False})
                 
         else:
