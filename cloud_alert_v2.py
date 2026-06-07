@@ -1,6 +1,7 @@
 import datetime
 import requests
 import json
+import os
 import numpy as np
 import pandas as pd
 from geopy.distance import geodesic
@@ -15,6 +16,7 @@ TARGET_LAT = 12.470361
 TARGET_LON = 99.792917
 RADIUS_KM = 5.0
 CLOUD_THRESHOLD = 0.0
+STATE_FILE = "bot_state.json"
 
 def send_line_push(message_text):
     url = "https://api.line.me/v2/bot/message/push"
@@ -28,6 +30,22 @@ def send_line_push(message_text):
             print(f"❌ LINE failed: {response.status_code} - {response.text}", flush=True)
     except Exception as e:
         print(f"❌ LINE Error: {e}", flush=True)
+
+def load_previous_state():
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return {"last_alert_triggered": False}
+    return {"last_alert_triggered": False}
+
+def save_current_state(state):
+    try:
+        with open(STATE_FILE, "w") as f:
+            json.dump(state, f)
+    except Exception as e:
+        print(f"⚠️ Cannot save state file: {e}", flush=True)
 
 def generate_radar_points(lat, lon, max_dist_km):
     center = (lat, lon)
@@ -51,7 +69,6 @@ if 7 <= current_hour <= 19:
         lats = [p["lat"] for p in radar_points]
         lons = [p["lon"] for p in radar_points]
         
-        # ⚡ ยิงคำขอแบบรวมกลุ่มพิกัด โดยตัด cloud_base_height ออกเพื่อไม่ให้ API พัง
         url = "https://api.open-meteo.com/v1/forecast"
         params = {
             "latitude": lats,
@@ -88,11 +105,11 @@ if 7 <= current_hour <= 19:
             df_summary = pd.DataFrame(raw_data).groupby("direction").mean().reset_index()
             
             time_str = current_time.strftime('%H:%M')
-            alert_message = f"⚠️ [Low-frequency-Pran] Cloud Radar Report ({time_str})\n"
+            alert_message = f"⚠️ [Low-frequency-Pran] Initial Cloud Detection ({time_str})\n"
             alert_message += f"Threshold: >= {CLOUD_THRESHOLD}% (Radius {RADIUS_KM} km)\n"
             alert_message += "----------------------------------\n"
             
-            alert_triggered = False
+            any_cloud_detected = False
             direction_order = ["Center", "N", "NE", "E", "SE", "S", "SW", "W", "NW"]
             
             for target_dir in direction_order:
@@ -106,13 +123,23 @@ if 7 <= current_hour <= 19:
                     alert_message += f"   [L: Low Cloud: {low_val:.0f}%]\n"
                     alert_message += f"   [M: Mid Cloud (6.5k-20k ft): {mid_val:.0f}%]\n"
                     alert_message += f"   [H: High Cloud (20k ft+): {high_val:.0f}%]\n"
-                    alert_triggered = True
+                    any_cloud_detected = True
+
+            # 🛠️ State Validation Checklist
+            prev_state = load_previous_state()
+            already_alerted = prev_state.get("last_alert_triggered", False)
             
-            if alert_triggered:
-                print("⚠️ Processing complete! Sending to LINE...", flush=True)
-                send_line_push(alert_message)
+            if any_cloud_detected:
+                if not already_alerted:
+                    print("⚠️ Cloud detected for the FIRST time! Sending alert...", flush=True)
+                    send_line_push(alert_message)
+                    save_current_state({"last_alert_triggered": True})
+                else:
+                    print("ℹ️ Cloud still persists, but alert already sent previously. Skipping.", flush=True)
             else:
-                print("✅ Clear Skies: Below threshold", flush=True)
+                print("✅ Skies clear. Resetting trigger state for next formations.", flush=True)
+                save_current_state({"last_alert_triggered": False})
+                
         else:
             print(f"❌ API Error: {resp.status_code} - {resp.text}", flush=True)
     except Exception as e:
