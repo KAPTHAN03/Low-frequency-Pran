@@ -16,7 +16,6 @@ TARGET_LAT = 12.470361
 TARGET_LON = 99.792917
 RADIUS_KM = 5.0
 
-# 🎯 ปรับเกณฑ์ความหนาแน่นเมฆเป็นมากกว่า 50%
 CLOUD_THRESHOLD = 50.0  
 STATE_FILE = "cloud_radar_state.json"
 
@@ -37,10 +36,9 @@ def load_previous_state():
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r") as f:
-                state_data = json.load(f)
-                return state_data
+                return json.load(f)
         except Exception as e:
-            print(f"⚠️ State file corrupted. Initializing default. Error: {e}", flush=True)
+            print(f"⚠️ State file error: {e}", flush=True)
             return {"last_alert_date": ""}
     return {"last_alert_date": ""}
 
@@ -70,21 +68,21 @@ current_date_str = current_time.strftime('%Y-%m-%d')
 
 print(f"🕒 Current Local Time: {current_time.strftime('%Y-%m-%d %H:%M:%S')} (Hour: {current_hour})", flush=True)
 
-# ตรวจเช็คว่าเป็น Manual Run หรือรันตามตรรกะปกติ (07:00 - 19:00)
-is_manual_run = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch" or os.environ.get("GITHUB_WORKFLOW") is not None
+# เช็คประเภทการรันงาน
+is_manual_run = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
 
 if 7 <= current_hour <= 19 or is_manual_run:
-    if is_manual_run and not (7 <= current_hour <= 19):
-        print("⚡ Manual Run detected outside regular hours. Bypassing time window lock!", flush=True)
-        
     try:
-        # 🛡️ ระบบล็อกความจำรายวัน (Daily Alert Lock)
         prev_state = load_previous_state()
         last_alert_date = prev_state.get("last_alert_date", "")
         
+        # ⚡ ปรับปรุงตรรกะปลดล็อก: ถ้ารันด้วยมือ ให้เคลียร์ล็อกทิ้งทันทีเพื่อเปิดโอกาสให้ส่ง LINE ทดสอบได้
+        if is_manual_run:
+            print("⚡ Manual Run detected! Bypassing and clearing Daily Lock for testing.", flush=True)
+            last_alert_date = "" 
+        
         if last_alert_date == current_date_str:
-            print(f"🛑 [LOCK Active] บอทเคยแจ้งเตือนของวันนี้ ({current_date_str}) ไปแล้วรอบหนึ่ง! บล็อกการส่ง LINE ตลอดวันที่เหลือตามคำสั่ง.", flush=True)
-            # จบการทำงานทันที ไม่ดึง API ให้เปลืองโควตา
+            print(f"🛑 [LOCK Active] บอทเคยแจ้งเตือนของวันนี้ ({current_date_str}) ไปแล้วรอบหนึ่ง! บล็อกการส่ง LINE ตามคำสั่ง.", flush=True)
             print("🏁 Job Completed (Skipped due to daily lock).")
             exit(0)
             
@@ -150,9 +148,8 @@ if 7 <= current_hour <= 19 or is_manual_run:
                     heavy_cloud_detected = True
 
             if heavy_cloud_detected:
-                print("⚠️ Heavy cloud detected for the FIRST time today! Sending alert to LINE...", flush=True)
+                print("⚠️ Heavy cloud detected! Sending alert to LINE...", flush=True)
                 send_line_push(alert_message)
-                # บันทึกวันที่ปัจจุบันไว้เพื่อล็อกการทำงานของวันนี้
                 save_current_state({"last_alert_date": current_date_str})
             else:
                 print("✅ Clouds are below 50%. No alert sent. Waiting for next hourly checks.", flush=True)
@@ -160,4 +157,8 @@ if 7 <= current_hour <= 19 or is_manual_run:
         else:
             print(f"❌ API Error: {resp.status_code} - {resp.text}", flush=True)
     except Exception as e:
-        print
+        print(f"❌ Processing Error: {e}", flush=True)
+else:
+    print(f"💤 Current time ({current_time.strftime('%H:%M')}) is outside operational hours (07:00 - 19:00). Standby.", flush=True)
+
+print("🏁 Job Completed.")
