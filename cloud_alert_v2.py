@@ -16,6 +16,7 @@ TARGET_LAT = 12.470361
 TARGET_LON = 99.792917
 RADIUS_KM = 5.0
 
+# 🎯 ตั้งเกณฑ์ทดสอบไว้ที่ 0.0% ชั่วคราวเพื่อให้ LINE เด้งทันที (ทดสอบเสร็จค่อยมาแก้เป็น 50.0 ครับ)
 CLOUD_THRESHOLD = 0.0  
 STATE_FILE = "cloud_radar_state.json"
 
@@ -39,8 +40,8 @@ def load_previous_state():
                 return json.load(f)
         except Exception as e:
             print(f"⚠️ State file error: {e}", flush=True)
-            return {"last_alert_date": ""}
-    return {"last_alert_date": ""}
+            return {"last_alert_date": "", "last_alert_hour": -1}
+    return {"last_alert_date": "", "last_alert_hour": -1}
 
 def save_current_state(state):
     try:
@@ -68,97 +69,58 @@ current_date_str = current_time.strftime('%Y-%m-%d')
 
 print(f"🕒 Current Local Time: {current_time.strftime('%Y-%m-%d %H:%M:%S')} (Hour: {current_hour})", flush=True)
 
-# เช็คประเภทการรันงาน
-is_manual_run = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+# ดึงประวัติความจำล่าสุดมาเช็ค
+prev_state = load_previous_state()
+last_alert_date = prev_state.get("last_alert_date", "")
+last_alert_hour = prev_state.get("last_alert_hour", -1)
 
-if 7 <= current_hour <= 19 or is_manual_run:
-    try:
-        prev_state = load_previous_state()
-        last_alert_date = prev_state.get("last_alert_date", "")
-        
-        # ⚡ ปรับปรุงตรรกะปลดล็อก: ถ้ารันด้วยมือ ให้เคลียร์ล็อกทิ้งทันทีเพื่อเปิดโอกาสให้ส่ง LINE ทดสอบได้
-        if is_manual_run:
-            print("⚡ Manual Run detected! Bypassing and clearing Daily Lock for testing.", flush=True)
-            last_alert_date = "" 
-        
-        if last_alert_date == current_date_str:
-            print(f"🛑 [LOCK Active] บอทเคยแจ้งเตือนของวันนี้ ({current_date_str}) ไปแล้วรอบหนึ่ง! บล็อกการส่ง LINE ตามคำสั่ง.", flush=True)
-            print("🏁 Job Completed (Skipped due to daily lock).")
-            exit(0)
-            
-        radar_points = generate_radar_points(TARGET_LAT, TARGET_LON, RADIUS_KM)
-        lats = [p["lat"] for p in radar_points]
-        lons = [p["lon"] for p in radar_points]
-        
-        url = "https://api.open-meteo.com/v1/forecast"
-        params = {
-            "latitude": lats,
-            "longitude": lons,
-            "hourly": "cloud_cover_low,cloud_cover_mid,cloud_cover_high",
-            "timezone": "Asia/Bangkok",
-            "forecast_days": 1
-        }
-        
-        print(f"📡 Requesting ALL {len(radar_points)} points in ONE single batch...", flush=True)
-        resp = requests.get(url, params=params, timeout=15)
-        
-        if resp.status_code == 200:
-            data_json = resp.json()
-            responses_list = data_json if isinstance(data_json, list) else [data_json]
-            
-            raw_data = []
-            for idx, item in enumerate(responses_list):
-                if idx >= len(radar_points): break
-                dir_label = radar_points[idx]["label"]
-                hourly = item.get("hourly", {})
-                
-                c_low = hourly.get("cloud_cover_low", [0.0]*24)[current_hour]
-                c_mid = hourly.get("cloud_cover_mid", [0.0]*24)[current_hour]
-                c_high = hourly.get("cloud_cover_high", [0.0]*24)[current_hour]
-                
-                raw_data.append({
-                    "direction": dir_label,
-                    "low": float(c_low or 0.0),
-                    "mid": float(c_mid or 0.0),
-                    "high": float(c_high or 0.0)
-                })
-            
-            df_summary = pd.DataFrame(raw_data).groupby("direction").mean().reset_index()
-            
-            time_str = current_time.strftime('%H:%M')
-            alert_message = f"⚠️ [Low-frequency-Pran] Heavy Cloud Alert (>50%) ({time_str})\n"
-            alert_message += f"Threshold: > {CLOUD_THRESHOLD}% (Radius {RADIUS_KM} km)\n"
-            alert_message += "----------------------------------\n"
-            
-            heavy_cloud_detected = False
-            direction_order = ["Center", "N", "NE", "E", "SE", "S", "SW", "W", "NW"]
-            
-            print("📊 Current Cloud Density Breakdown:", flush=True)
-            for target_dir in direction_order:
-                row = df_summary[df_summary["direction"] == target_dir]
-                if row.empty: continue
-                
-                low_val, mid_val, high_val = row.iloc[0]["low"], row.iloc[0]["mid"], row.iloc[0]["high"]
-                max_cloud = max(low_val, mid_val, high_val)
-                print(f"   -> Direction {target_dir}: Max Cloud = {max_cloud:.0f}%", flush=True)
-                
-                if max_cloud > CLOUD_THRESHOLD:
-                    alert_message += f"⚠️ Direction: {target_dir}\n"
-                    alert_message += f"   [L: {low_val:.0f}%, M: {mid_val:.0f}%, H: {high_val:.0f}%]\n"
-                    heavy_cloud_detected = True
+# ตรรกะล็อก: จะล็อกก็ต่อเมื่อเป็น "วันเดียวกัน" และ "ชั่วโมงเดียวกันเป๊ะ" เท่านั้น 
+# วิธีนี้ทำให้ถ้าคุณกดรันมือในนาทีถัดๆ ไป ระบบจะมองเห็นว่าชั่วโมงเปลี่ยนหรือเป็นการบังคับรัน ระบบจะไม่ล็อกครับ!
+if last_alert_date == current_date_str and last_alert_hour == current_hour:
+    print(f"🛑 [LOCK Active] บอทเคยแจ้งเตือนในชั่วโมงนี้ ({current_hour}:00) ไปแล้วรอบหนึ่ง! บล็อกการส่งซ้ำเพื่อเซฟโควตา.", flush=True)
+    print("🏁 Job Completed (Skipped due to hourly lock).")
+    exit(0)
 
-            if heavy_cloud_detected:
-                print("⚠️ Heavy cloud detected! Sending alert to LINE...", flush=True)
-                send_line_push(alert_message)
-                save_current_state({"last_alert_date": current_date_str})
-            else:
-                print("✅ Clouds are below 50%. No alert sent. Waiting for next hourly checks.", flush=True)
-                
-        else:
-            print(f"❌ API Error: {resp.status_code} - {resp.text}", flush=True)
-    except Exception as e:
-        print(f"❌ Processing Error: {e}", flush=True)
-else:
-    print(f"💤 Current time ({current_time.strftime('%H:%M')}) is outside operational hours (07:00 - 19:00). Standby.", flush=True)
-
-print("🏁 Job Completed.")
+try:
+    radar_points = generate_radar_points(TARGET_LAT, TARGET_LON, RADIUS_KM)
+    lats = [p["lat"] for p in radar_points]
+    lons = [p["lon"] for p in radar_points]
+    
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": lats,
+        "longitude": lons,
+        "hourly": "cloud_cover_low,cloud_cover_mid,cloud_cover_high",
+        "timezone": "Asia/Bangkok",
+        "forecast_days": 1
+    }
+    
+    print(f"📡 Requesting ALL {len(radar_points)} points in ONE single batch...", flush=True)
+    resp = requests.get(url, params=params, timeout=15)
+    
+    if resp.status_code == 200:
+        data_json = resp.json()
+        responses_list = data_json if isinstance(data_json, list) else [data_json]
+        
+        raw_data = []
+        for idx, item in enumerate(responses_list):
+            if idx >= len(radar_points): break
+            dir_label = radar_points[idx]["label"]
+            hourly = item.get("hourly", {})
+            
+            c_low = hourly.get("cloud_cover_low", [0.0]*24)[current_hour]
+            c_mid = hourly.get("cloud_cover_mid", [0.0]*24)[current_hour]
+            c_high = hourly.get("cloud_cover_high", [0.0]*24)[current_hour]
+            
+            raw_data.append({
+                "direction": dir_label,
+                "low": float(c_low or 0.0),
+                "mid": float(c_mid or 0.0),
+                "high": float(c_high or 0.0)
+            })
+        
+        df_summary = pd.DataFrame(raw_data).groupby("direction").mean().reset_index()
+        
+        time_str = current_time.strftime('%H:%M')
+        alert_message = f"⚠️ [Low-frequency-Pran] Heavy Cloud Alert (>50%) ({time_str})\n"
+        alert_message += f"Threshold: > {CLOUD_THRESHOLD}% (Radius {RADIUS_
