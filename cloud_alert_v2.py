@@ -16,7 +16,7 @@ TARGET_LAT = 12.470361
 TARGET_LON = 99.792917
 RADIUS_KM = 5.0
 
-# 🎯 ตั้งเกณฑ์ทดสอบไว้ที่ 0.0% ชั่วคราวเพื่อให้ LINE เด้งทันที (ทดสอบเสร็จค่อยมาแก้เป็น 50.0 ครับ)
+# 🎯 ตั้งเกณฑ์ทดสอบไว้ที่ 0.0% เพื่อให้ LINE เด้งทันที (ทดสอบผ่านแล้วค่อยมาแก้เป็น 50.0 ครับ)
 CLOUD_THRESHOLD = 0.0  
 STATE_FILE = "cloud_radar_state.json"
 
@@ -74,8 +74,7 @@ prev_state = load_previous_state()
 last_alert_date = prev_state.get("last_alert_date", "")
 last_alert_hour = prev_state.get("last_alert_hour", -1)
 
-# ตรรกะล็อก: จะล็อกก็ต่อเมื่อเป็น "วันเดียวกัน" และ "ชั่วโมงเดียวกันเป๊ะ" เท่านั้น 
-# วิธีนี้ทำให้ถ้าคุณกดรันมือในนาทีถัดๆ ไป ระบบจะมองเห็นว่าชั่วโมงเปลี่ยนหรือเป็นการบังคับรัน ระบบจะไม่ล็อกครับ!
+# ตรรกะล็อกรายชั่วโมง (เมื่อกดรันซ้ำในชั่วโมงเดิม)
 if last_alert_date == current_date_str and last_alert_hour == current_hour:
     print(f"🛑 [LOCK Active] บอทเคยแจ้งเตือนในชั่วโมงนี้ ({current_hour}:00) ไปแล้วรอบหนึ่ง! บล็อกการส่งซ้ำเพื่อเซฟโควตา.", flush=True)
     print("🏁 Job Completed (Skipped due to hourly lock).")
@@ -123,4 +122,36 @@ try:
         
         time_str = current_time.strftime('%H:%M')
         alert_message = f"⚠️ [Low-frequency-Pran] Heavy Cloud Alert (>50%) ({time_str})\n"
-        alert_message += f"Threshold: > {CLOUD_THRESHOLD}% (Radius {RADIUS_
+        alert_message += f"Threshold: > {CLOUD_THRESHOLD}% (Radius {RADIUS_KM} km)\n"
+        alert_message += "----------------------------------\n"
+        
+        heavy_cloud_detected = False
+        direction_order = ["Center", "N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+        
+        print("📊 Current Cloud Density Breakdown:", flush=True)
+        for target_dir in direction_order:
+            row = df_summary[df_summary["direction"] == target_dir]
+            if row.empty: continue
+            
+            low_val, mid_val, high_val = row.iloc[0]["low"], row.iloc[0]["mid"], row.iloc[0]["high"]
+            max_cloud = max(low_val, mid_val, high_val)
+            print(f"   -> Direction {target_dir}: Max Cloud = {max_cloud:.0f}%", flush=True)
+            
+            if max_cloud >= CLOUD_THRESHOLD:
+                alert_message += f"⚠️ Direction: {target_dir}\n"
+                alert_message += f"   [L: {low_val:.0f}%, M: {mid_val:.0f}%, H: {high_val:.0f}%]\n"
+                heavy_cloud_detected = True
+
+        if heavy_cloud_detected:
+            print("⚠️ Heavy cloud detected! Sending alert to LINE...", flush=True)
+            send_line_push(alert_message)
+            save_current_state({"last_alert_date": current_date_str, "last_alert_hour": current_hour})
+        else:
+            print("✅ Clouds are below threshold. No alert sent.", flush=True)
+            
+    else:
+        print(f"❌ API Error: {resp.status_code} - {resp.text}", flush=True)
+except Exception as e:
+    print(f"❌ Processing Error: {e}", flush=True)
+
+print("🏁 Job Completed.")
