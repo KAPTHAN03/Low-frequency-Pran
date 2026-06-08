@@ -17,7 +17,7 @@ TARGET_LON = 99.792917
 RADIUS_KM = 5.0
 
 # 🎯 ตั้งเกณฑ์ทดสอบไว้ที่ 0.0% เพื่อให้ LINE เด้งทันที (ทดสอบผ่านแล้วค่อยมาแก้เป็น 50.0 ครับ)
-CLOUD_THRESHOLD = 0.0  
+CLOUD_THRESHOLD = 50.0  
 STATE_FILE = "cloud_radar_state.json"
 
 def send_line_push(message_text):
