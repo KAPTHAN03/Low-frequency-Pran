@@ -3,30 +3,27 @@ name: Hourly Cloud Alert Bot
 on:
   workflow_dispatch: # เปิดปุ่มให้กดสั่งรันด้วยมือได้ตามปกติ
   schedule:
-    # ⏱️ รันอัตโนมัติทุก 1 ชั่วโมง (นาทีที่ 0 ของทุกชั่วโมง)
-    - cron: '0 * * * *'
+    - cron: '0 * * * *' # รันอัตโนมัติทุกชั่วโมง
   push:
     branches: [ "main" ]
-
-# ⚡ บังคับให้ระบบ Runner ทั้งหมดข้ามไปใช้ Node.js 24 ทันที (แก้บั๊กตามคำแนะนำของ GitHub)
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
 
     steps:
+      # 🛡️ ถอยกลับมาใช้เวอร์ชันคลาสสิกที่เสถียร 100% บนเซิร์ฟเวอร์ปัจจุบัน
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           persist-credentials: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.12'
 
+       Tar-up และลงสมุดสมุดบันทึก Library
       - name: Install Libraries
         run: |
           pip install openmeteo-requests requests-cache tenacity pandas geopy requests
