@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 🛡️ ถอยกลับมาใช้เวอร์ชันคลาสสิกที่เสถียร 100% บนเซิร์ฟเวอร์ปัจจุบัน
+      # 🛡️ ถอยกลับมาใช้เวอร์ชันคลาสสิกที่เสถียรบนเซิร์ฟเวอร์ปัจจุบัน เพื่อเลี่ยงปัญหา Node.js 24 เอ๋อ
       - name: Checkout Repository
         uses: actions/checkout@v3
         with:
@@ -23,7 +23,6 @@ jobs:
         with:
           python-version: '3.12'
 
-       Tar-up และลงสมุดสมุดบันทึก Library
       - name: Install Libraries
         run: |
           pip install openmeteo-requests requests-cache tenacity pandas geopy requests
