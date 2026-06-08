@@ -16,7 +16,7 @@ TARGET_LAT = 12.470361
 TARGET_LON = 99.792917
 RADIUS_KM = 5.0
 
-CLOUD_THRESHOLD = 50.0  
+CLOUD_THRESHOLD = 0.0  
 STATE_FILE = "cloud_radar_state.json"
 
 def send_line_push(message_text):
