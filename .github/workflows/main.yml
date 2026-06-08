@@ -1,29 +1,25 @@
 name: Hourly Cloud Alert Bot
 
 on:
-  workflow_dispatch: # เปิดปุ่มให้กดสั่งรันด้วยมือได้ตามปกติ
+  workflow_dispatch: 
   schedule:
-    # ⏱️ รันอัตโนมัติทุก 1 ชั่วโมง (นาทีที่ 0 ของทุกชั่วโมง)
     - cron: '0 * * * *'
   push:
     branches: [ "main" ]
-
-# ⚡ บังคับให้ระบบปลั๊กอินทั้งหมดขยับขึ้นไปใช้ Node.js 24 ล่วงหน้า เพื่อปิดการแจ้งเตือน Deprecated
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
 
     steps:
+      # อัปเดตปลั๊กอินภายในเพื่อตัดคำเตือนเรื่อง Node.js ทิ้งอย่างถาวร
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
         with:
           persist-credentials: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.3.0
         with:
           python-version: '3.12'
 
