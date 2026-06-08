@@ -1,13 +1,21 @@
 name: Hourly Cloud Alert Bot
 
 on:
+  # 1. ⚡ เปิดระบบให้สามารถกดปุ่ม "Run workflow" สั่งรันด้วยมือได้ตลอดเวลา
+  workflow_dispatch: 
+
+  # 2. ⏱️ สั่งรันอัตโนมัติทุก 1 ชั่วโมง (นาทีที่ 0 ของทุกชั่วโมง)
   schedule:
     - cron: '0 * * * *'
-  workflow_dispatch:
+
+  # 3. 🚀 สั่งรันทันทีหากคุณมีการกดแก้ไขและอัปเดตไฟล์โค้ดบน GitHub (สะดวกต่อการทดสอบมาก)
+  push:
+    branches: [ "main" ]
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -33,6 +41,8 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # คุมการอัปเดตไฟล์บันทึกสถานะตามโครงสร้างที่คุณใช้จริงในเครื่อง
           if [ -f cloud_radar_state.json ]; then
             git add cloud_radar_state.json
             git commit -m "🤖 [Automated] Update cloud radar state memory [Skip CI]" || echo "No changes to commit"
