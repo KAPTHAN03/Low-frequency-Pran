@@ -40,8 +40,8 @@ def load_previous_state():
                 return json.load(f)
         except Exception as e:
             print(f"⚠️ State file error: {e}", flush=True)
-            return {"last_alert_date": ""}
-    return {"last_alert_date": ""}
+            return {"last_alert_date": "", "last_alert_hour": -1}
+    return {"last_alert_date": "", "last_alert_hour": -1}
 
 def save_current_state(state):
     try:
@@ -78,14 +78,16 @@ if not (7 <= current_hour <= 19):
     print("🏁 Job Completed (Standby mode).")
     exit(0)
 
-# ดึงประวัติความจำล็อกรายวัน
+# ดึงประวัติความจำล็อกล่าสุดมาเช็ค
 prev_state = load_previous_state()
 last_alert_date = prev_state.get("last_alert_date", "")
+last_alert_hour = prev_state.get("last_alert_hour", -1)
 
-# 🛑 ตรรกะล็อกรายวันเด็ดขาด: ถ้าวันนี้เคยเตือนไปแล้ว ไม่ว่าจะชั่วโมงไหน จะไม่มีการส่ง LINE ซ้ำอีก
-if last_alert_date == current_date_str:
-    print(f"🛑 [DAILY LOCK Active] วันนี้ ({current_date_str}) บอทเคยส่งแจ้งเตือนไปแล้วรอบหนึ่ง บล็อกการส่ง LINE ทุกกรณีจนกว่าจะขึ้นวันใหม่.", flush=True)
-    print("🏁 Job Completed (Skipped due to daily lock).")
+# 🛑 เปลี่ยนเป็นตรรกะล็อกรายชั่วโมง: จะบล็อกก็ต่อเมื่อเป็น "วันเดียวกัน AND ชั่วโมงเดียวกันเป๊ะ" เท่านั้น
+# เพื่อป้องกันการส่ง LINE ซ้ำซ้อนหากเวิร์กโฟลว์รันเบิ้ลในชั่วโมงเดิม แต่ชั่วโมงถัดไปจะรันได้ปกติ!
+if last_alert_date == current_date_str and last_alert_hour == current_hour:
+    print(f"🛑 [HOURLY LOCK Active] บอทเคยแจ้งเตือนในชั่วโมงนี้ ({current_hour}:00) ไปแล้วรอบหนึ่ง! บล็อกการส่งซ้ำในชั่วโมงเดียวกัน.", flush=True)
+    print("🏁 Job Completed (Skipped due to hourly lock).")
     exit(0)
 
 try:
@@ -153,8 +155,8 @@ try:
         if heavy_cloud_detected:
             print("⚠️ Heavy cloud detected! Sending alert to LINE...", flush=True)
             send_line_push(alert_message)
-            # ล็อกวันที่ปัจจุบันไว้ เพื่อไม่ให้รันซ้ำอีกในวันนี้
-            save_current_state({"last_alert_date": current_date_str})
+            # บันทึกทั้ง "วันที่" และ "ชั่วโมงปัจจุบัน" เพื่อให้ชั่วโมงถัดไปทำงานต่อได้ แต่ชั่วโมงเดิมห้ามเบิ้ล
+            save_current_state({"last_alert_date": current_date_str, "last_alert_hour": current_hour})
         else:
             print("✅ Clouds are below threshold. No alert sent.", flush=True)
             
