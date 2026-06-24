@@ -16,7 +16,7 @@ TARGET_LAT = 12.470361
 TARGET_LON = 99.792917
 RADIUS_KM = 5.0
 
-# 🎯 ตั้งเกณฑ์ทดสอบไว้ที่ 0.0% เพื่อให้ LINE เด้งทันที (ทดสอบผ่านแล้วค่อยมาแก้เป็น 50.0 ครับ)
+# 🎯 เกณฑ์ความหนาของเมฆ (ใช้งานจริงตั้งไว้ที่ 50.0%)
 CLOUD_THRESHOLD = 50.0  
 STATE_FILE = "cloud_radar_state.json"
 
@@ -40,8 +40,8 @@ def load_previous_state():
                 return json.load(f)
         except Exception as e:
             print(f"⚠️ State file error: {e}", flush=True)
-            return {"last_alert_date": "", "last_alert_hour": -1}
-    return {"last_alert_date": "", "last_alert_hour": -1}
+            return {"last_alert_date": ""}
+    return {"last_alert_date": ""}
 
 def save_current_state(state):
     try:
@@ -63,21 +63,29 @@ def generate_radar_points(lat, lon, max_dist_km):
     return points
 
 print("🤖 Cloud Radar Bot Monitoring Started...", flush=True)
-current_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7)))
+
+# ⏱️ จัดการเรื่องโซนเวลาให้เป็นเวลาไทย (GMT+7) อย่างแม่นยำ
+tz_thai = datetime.timezone(datetime.timedelta(hours=7))
+current_time = datetime.datetime.now(tz_thai)
 current_hour = current_time.hour  
 current_date_str = current_time.strftime('%Y-%m-%d')
 
 print(f"🕒 Current Local Time: {current_time.strftime('%Y-%m-%d %H:%M:%S')} (Hour: {current_hour})", flush=True)
 
-# ดึงประวัติความจำล่าสุดมาเช็ค
+# 🛡️ บังคับให้บอททำงานเฉพาะช่วงเวลา 07:00 ถึง 19:00 น. เท่านั้น นอกเหนือจากนี้ให้จำศีลทันที
+if not (7 <= current_hour <= 19):
+    print(f"💤 ช่วงเวลานี้ ({current_hour}:00) อยู่นอกเวลาปฏิบัติงาน (07:00 - 19:00). บอทจำศีลอัตโนมัติ ไม่ส่ง LINE.", flush=True)
+    print("🏁 Job Completed (Standby mode).")
+    exit(0)
+
+# ดึงประวัติความจำล็อกรายวัน
 prev_state = load_previous_state()
 last_alert_date = prev_state.get("last_alert_date", "")
-last_alert_hour = prev_state.get("last_alert_hour", -1)
 
-# ตรรกะล็อกรายชั่วโมง (เมื่อกดรันซ้ำในชั่วโมงเดิม)
-if last_alert_date == current_date_str and last_alert_hour == current_hour:
-    print(f"🛑 [LOCK Active] บอทเคยแจ้งเตือนในชั่วโมงนี้ ({current_hour}:00) ไปแล้วรอบหนึ่ง! บล็อกการส่งซ้ำเพื่อเซฟโควตา.", flush=True)
-    print("🏁 Job Completed (Skipped due to hourly lock).")
+# 🛑 ตรรกะล็อกรายวันเด็ดขาด: ถ้าวันนี้เคยเตือนไปแล้ว ไม่ว่าจะชั่วโมงไหน จะไม่มีการส่ง LINE ซ้ำอีก
+if last_alert_date == current_date_str:
+    print(f"🛑 [DAILY LOCK Active] วันนี้ ({current_date_str}) บอทเคยส่งแจ้งเตือนไปแล้วรอบหนึ่ง บล็อกการส่ง LINE ทุกกรณีจนกว่าจะขึ้นวันใหม่.", flush=True)
+    print("🏁 Job Completed (Skipped due to daily lock).")
     exit(0)
 
 try:
@@ -145,7 +153,8 @@ try:
         if heavy_cloud_detected:
             print("⚠️ Heavy cloud detected! Sending alert to LINE...", flush=True)
             send_line_push(alert_message)
-            save_current_state({"last_alert_date": current_date_str, "last_alert_hour": current_hour})
+            # ล็อกวันที่ปัจจุบันไว้ เพื่อไม่ให้รันซ้ำอีกในวันนี้
+            save_current_state({"last_alert_date": current_date_str})
         else:
             print("✅ Clouds are below threshold. No alert sent.", flush=True)
             
