@@ -5,7 +5,11 @@ import os
 import numpy as np
 import pandas as pd
 from geopy.distance import geodesic
-import matplotlib.pyplot as plt  # 👈 เพิ่มสำหรับสร้างกราฟ
+
+# บังคับให้ matplotlib ใช้ Backend แบบไม่แสดงหน้าจอ (ป้องกัน Error บน GitHub Actions / Server)
+import matplotlib
+matplotlib.use('Agg')  
+import matplotlib.pyplot as plt
 
 # ===================================================
 # 📌 LINE API & CONFIGURATION
@@ -18,9 +22,9 @@ TARGET_LON = 99.792917
 RADIUS_KM = 5.0
 
 # 🎯 เกณฑ์ความหนาของเมฆ (ใช้งานจริงตั้งไว้ที่ 50.0%)
-CLOUD_THRESHOLD = 10.0  
+CLOUD_THRESHOLD = 50.0  
 STATE_FILE = "cloud_radar_state.json"
-GRAPH_FILE = "cloud_history_5h.png"  # 👈 ชื่อไฟล์รูปกราฟที่จะบันทึก
+GRAPH_FILE = "cloud_history_5h.png"
 
 def send_line_push(message_text):
     url = "https://api.line.me/v2/bot/message/push"
@@ -64,29 +68,29 @@ def generate_radar_points(lat, lon, max_dist_km):
         points.append({"lat": dest_full.latitude, "lon": dest_full.longitude, "label": label})
     return points
 
-# 📊 ฟังก์ชันใหม่สำหรับพล็อตกราฟย้อนหลัง 5 ชั่วโมง
 def generate_and_save_graph(history_df):
-    plt.figure(figsize=(8, 4))
-    
-    # พล็อตกราฟเส้นหรือแท่งของค่าเฉลี่ยเมฆทุกระดับในรอบ 5 ชั่วโมงที่ผ่านมา
-    x_labels = [f"{h:02d}:00" for h in history_df["hour"]]
-    
-    plt.plot(x_labels, history_df["low"], marker='o', label='Low Clouds', color='#1f77b4', linewidth=2)
-    plt.plot(x_labels, history_df["mid"], marker='s', label='Mid Clouds', color='#ff7f0e', linewidth=2)
-    plt.plot(x_labels, history_df["high"], marker='^', label='High Clouds', color='#2ca02c', linewidth=2)
-    
-    plt.axhline(y=CLOUD_THRESHOLD, color='r', linestyle='--', label=f'Threshold ({CLOUD_THRESHOLD}%)')
-    plt.title("Cloud Cover History (Past 5 Hours Area Avg)")
-    plt.xlabel("Time")
-    plt.ylabel("Cloud Cover (%)")
-    plt.ylim(0, 105)
-    plt.grid(True, linestyle=':', alpha=0.6)
-    plt.legend(loc='upper left')
-    plt.tight_layout()
-    
-    plt.savefig(GRAPH_FILE, dpi=150)
-    plt.close()
-    print(f"📊 Graph successfully generated and saved to {GRAPH_FILE}", flush=True)
+    try:
+        plt.figure(figsize=(8, 4))
+        x_labels = [f"{int(h):02d}:00" for h in history_df["hour"]]
+        
+        plt.plot(x_labels, history_df["low"], marker='o', label='Low Clouds', color='#1f77b4', linewidth=2)
+        plt.plot(x_labels, history_df["mid"], marker='s', label='Mid Clouds', color='#ff7f0e', linewidth=2)
+        plt.plot(x_labels, history_df["high"], marker='^', label='High Clouds', color='#2ca02c', linewidth=2)
+        
+        plt.axhline(y=CLOUD_THRESHOLD, color='r', linestyle='--', label=f'Threshold ({CLOUD_THRESHOLD}%)')
+        plt.title("Cloud Cover History (Past 5 Hours Area Avg)")
+        plt.xlabel("Time")
+        plt.ylabel("Cloud Cover (%)")
+        plt.ylim(0, 105)
+        plt.grid(True, linestyle=':', alpha=0.6)
+        plt.legend(loc='upper left')
+        plt.tight_layout()
+        
+        plt.savefig(GRAPH_FILE, dpi=150)
+        plt.close()
+        print(f"📊 Graph successfully generated and saved to {GRAPH_FILE}", flush=True)
+    except Exception as e:
+        print(f"❌ Graph Generation Error: {e}", flush=True)
 
 
 print("🤖 Cloud Radar Bot Monitoring Started...", flush=True)
@@ -133,8 +137,7 @@ try:
         data_json = resp.json()
         responses_list = data_json if isinstance(data_json, list) else [data_json]
         
-        # คำนวณช่วงเวลา 5 ชั่วโมงย้อนหลัง (รวมชั่วโมงปัจจุบันด้วย)
-        # ป้องกันกรณีเช้าตรู่ (เช่น 07:00 ย้อนไป 5 ชม. จะเริ่มที่ชั่วโมงที่ 3)
+        # คำนวณช่วงเวลา 5 ชั่วโมงย้อนหลัง (รวมชั่วโมงปัจจุบัน)
         start_hour = max(0, current_hour - 4) 
         target_hours = list(range(start_hour, current_hour + 1))
         
@@ -150,7 +153,6 @@ try:
             c_mid_list = hourly.get("cloud_cover_mid", [0.0]*24)
             c_high_list = hourly.get("cloud_cover_high", [0.0]*24)
             
-            # 1. ดึงข้อมูลสำหรับพล็อตกราฟย้อนหลัง 5 ชั่วโมง
             for h in target_hours:
                 raw_data_all_hours.append({
                     "hour": h,
@@ -160,7 +162,6 @@ try:
                     "high": float(c_high_list[h] or 0.0)
                 })
             
-            # 2. ดึงข้อมูลชั่วโมงปัจจุบัน (สำหรับวิเคราะห์ Alert)
             raw_data_current.append({
                 "direction": dir_label,
                 "low": float(c_low_list[current_hour] or 0.0),
@@ -168,14 +169,12 @@ try:
                 "high": float(c_high_list[current_hour] or 0.0)
             })
         
-        # ทำกลุ่มข้อมูลและเฉลี่ยพิกัดทั้งหมดเพื่อสร้างกราฟประวัติภาพรวม
         df_all = pd.DataFrame(raw_data_all_hours)
         df_history_avg = df_all.groupby("hour")[["low", "mid", "high"]].mean().reset_index()
         
-        # เรียกฟังก์ชันสร้างและเซฟกราฟย้อนหลัง 5 ชั่วโมง
+        # สร้างกราฟและเซฟไฟล์เป็นรูปภาพในโฟลเดอร์ทำงาน
         generate_and_save_graph(df_history_avg)
         
-        # จัดการข้อมูลชั่วโมงปัจจุบันเหมือนเดิม
         df_summary = pd.DataFrame(raw_data_current).groupby("direction").mean().reset_index()
         
         time_str = current_time.strftime('%H:%M')
@@ -200,7 +199,6 @@ try:
                 alert_message += f"   [L: {low_val:.0f}%, M: {mid_val:.0f}%, H: {high_val:.0f}%]\n"
                 heavy_cloud_detected = True
 
-        # เพิ่มข้อมูลย้อนหลังแบบ Text สั้นๆ ต่อท้าย LINE Alert Message
         alert_message += "----------------------------------\n"
         alert_message += "📈 Past 5h Avg (Low/Mid/High):\n"
         for _, r in df_history_avg.iterrows():
