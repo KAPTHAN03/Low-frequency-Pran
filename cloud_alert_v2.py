@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from geopy.distance import geodesic
 
-# บังคับให้ matplotlib ใช้ Backend แบบไม่แสดงหน้าจอ (ป้องกัน Error บน GitHub Actions / Server)
+# บังคับให้ matplotlib ใช้ Backend แบบไม่แสดงหน้าจอ (เซฟเป็นรูปภาพอย่างเดียว)
 import matplotlib
 matplotlib.use('Agg')  
 import matplotlib.pyplot as plt
@@ -137,7 +137,7 @@ try:
         data_json = resp.json()
         responses_list = data_json if isinstance(data_json, list) else [data_json]
         
-        # คำนวณช่วงเวลา 5 ชั่วโมงย้อนหลัง (รวมชั่วโมงปัจจุบัน)
+        # คำนวณช่วงเวลา 5 ชั่วโมงย้อนหลัง
         start_hour = max(0, current_hour - 4) 
         target_hours = list(range(start_hour, current_hour + 1))
         
@@ -172,7 +172,7 @@ try:
         df_all = pd.DataFrame(raw_data_all_hours)
         df_history_avg = df_all.groupby("hour")[["low", "mid", "high"]].mean().reset_index()
         
-        # สร้างกราฟและเซฟไฟล์เป็นรูปภาพในโฟลเดอร์ทำงาน
+        # สร้างกราฟและเซฟไฟล์เป็นรูปภาพ
         generate_and_save_graph(df_history_avg)
         
         df_summary = pd.DataFrame(raw_data_current).groupby("direction").mean().reset_index()
