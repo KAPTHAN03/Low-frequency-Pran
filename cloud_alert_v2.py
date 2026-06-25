@@ -6,11 +6,6 @@ import numpy as np
 import pandas as pd
 from geopy.distance import geodesic
 
-# บังคับให้ matplotlib ใช้ Backend แบบไม่แสดงหน้าจอ (เซฟเป็นรูปภาพอย่างเดียว)
-import matplotlib
-matplotlib.use('Agg')  
-import matplotlib.pyplot as plt
-
 # ===================================================
 # 📌 LINE API & CONFIGURATION
 # ===================================================
@@ -24,7 +19,6 @@ RADIUS_KM = 5.0
 # 🎯 เกณฑ์ความหนาของเมฆ (ใช้งานจริงตั้งไว้ที่ 50.0%)
 CLOUD_THRESHOLD = 50.0  
 STATE_FILE = "cloud_radar_state.json"
-GRAPH_FILE = "cloud_history_5h.png"
 
 def send_line_push(message_text):
     url = "https://api.line.me/v2/bot/message/push"
@@ -68,33 +62,9 @@ def generate_radar_points(lat, lon, max_dist_km):
         points.append({"lat": dest_full.latitude, "lon": dest_full.longitude, "label": label})
     return points
 
-def generate_and_save_graph(history_df):
-    try:
-        plt.figure(figsize=(8, 4))
-        x_labels = [f"{int(h):02d}:00" for h in history_df["hour"]]
-        
-        plt.plot(x_labels, history_df["low"], marker='o', label='Low Clouds', color='#1f77b4', linewidth=2)
-        plt.plot(x_labels, history_df["mid"], marker='s', label='Mid Clouds', color='#ff7f0e', linewidth=2)
-        plt.plot(x_labels, history_df["high"], marker='^', label='High Clouds', color='#2ca02c', linewidth=2)
-        
-        plt.axhline(y=CLOUD_THRESHOLD, color='r', linestyle='--', label=f'Threshold ({CLOUD_THRESHOLD}%)')
-        plt.title("Cloud Cover History (Past 5 Hours Area Avg)")
-        plt.xlabel("Time")
-        plt.ylabel("Cloud Cover (%)")
-        plt.ylim(0, 105)
-        plt.grid(True, linestyle=':', alpha=0.6)
-        plt.legend(loc='upper left')
-        plt.tight_layout()
-        
-        plt.savefig(GRAPH_FILE, dpi=150)
-        plt.close()
-        print(f"📊 Graph successfully generated and saved to {GRAPH_FILE}", flush=True)
-    except Exception as e:
-        print(f"❌ Graph Generation Error: {e}", flush=True)
-
-
 print("🤖 Cloud Radar Bot Monitoring Started...", flush=True)
 
+# ⏱️ จัดการเรื่องโซนเวลาให้เป็นเวลาไทย (GMT+7) อย่างแม่นยำ
 tz_thai = datetime.timezone(datetime.timedelta(hours=7))
 current_time = datetime.datetime.now(tz_thai)
 current_hour = current_time.hour  
@@ -102,15 +72,19 @@ current_date_str = current_time.strftime('%Y-%m-%d')
 
 print(f"🕒 Current Local Time: {current_time.strftime('%Y-%m-%d %H:%M:%S')} (Hour: {current_hour})", flush=True)
 
+# 🛡️ บังคับให้บอททำงานเฉพาะช่วงเวลา 07:00 ถึง 19:00 น. เท่านั้น นอกเหนือจากนี้ให้จำศีลทันที
 if not (7 <= current_hour <= 19):
     print(f"💤 ช่วงเวลานี้ ({current_hour}:00) อยู่นอกเวลาปฏิบัติงาน (07:00 - 19:00). บอทจำศีลอัตโนมัติ ไม่ส่ง LINE.", flush=True)
     print("🏁 Job Completed (Standby mode).")
     exit(0)
 
+# ดึงประวัติความจำล็อกล่าสุดมาเช็ค
 prev_state = load_previous_state()
 last_alert_date = prev_state.get("last_alert_date", "")
 last_alert_hour = prev_state.get("last_alert_hour", -1)
 
+# 🛑 เปลี่ยนเป็นตรรกะล็อกรายชั่วโมง: จะบล็อกก็ต่อเมื่อเป็น "วันเดียวกัน AND ชั่วโมงเดียวกันเป๊ะ" เท่านั้น
+# เพื่อป้องกันการส่ง LINE ซ้ำซ้อนหากเวิร์กโฟลว์รันเบิ้ลในชั่วโมงเดิม แต่ชั่วโมงถัดไปจะรันได้ปกติ!
 if last_alert_date == current_date_str and last_alert_hour == current_hour:
     print(f"🛑 [HOURLY LOCK Active] บอทเคยแจ้งเตือนในชั่วโมงนี้ ({current_hour}:00) ไปแล้วรอบหนึ่ง! บล็อกการส่งซ้ำในชั่วโมงเดียวกัน.", flush=True)
     print("🏁 Job Completed (Skipped due to hourly lock).")
@@ -137,45 +111,24 @@ try:
         data_json = resp.json()
         responses_list = data_json if isinstance(data_json, list) else [data_json]
         
-        # คำนวณช่วงเวลา 5 ชั่วโมงย้อนหลัง
-        start_hour = max(0, current_hour - 4) 
-        target_hours = list(range(start_hour, current_hour + 1))
-        
-        raw_data_all_hours = []
-        raw_data_current = []
-        
+        raw_data = []
         for idx, item in enumerate(responses_list):
             if idx >= len(radar_points): break
             dir_label = radar_points[idx]["label"]
             hourly = item.get("hourly", {})
             
-            c_low_list = hourly.get("cloud_cover_low", [0.0]*24)
-            c_mid_list = hourly.get("cloud_cover_mid", [0.0]*24)
-            c_high_list = hourly.get("cloud_cover_high", [0.0]*24)
+            c_low = hourly.get("cloud_cover_low", [0.0]*24)[current_hour]
+            c_mid = hourly.get("cloud_cover_mid", [0.0]*24)[current_hour]
+            c_high = hourly.get("cloud_cover_high", [0.0]*24)[current_hour]
             
-            for h in target_hours:
-                raw_data_all_hours.append({
-                    "hour": h,
-                    "direction": dir_label,
-                    "low": float(c_low_list[h] or 0.0),
-                    "mid": float(c_mid_list[h] or 0.0),
-                    "high": float(c_high_list[h] or 0.0)
-                })
-            
-            raw_data_current.append({
+            raw_data.append({
                 "direction": dir_label,
-                "low": float(c_low_list[current_hour] or 0.0),
-                "mid": float(c_mid_list[current_hour] or 0.0),
-                "high": float(c_high_list[current_hour] or 0.0)
+                "low": float(c_low or 0.0),
+                "mid": float(c_mid or 0.0),
+                "high": float(c_high or 0.0)
             })
         
-        df_all = pd.DataFrame(raw_data_all_hours)
-        df_history_avg = df_all.groupby("hour")[["low", "mid", "high"]].mean().reset_index()
-        
-        # สร้างกราฟและเซฟไฟล์เป็นรูปภาพ
-        generate_and_save_graph(df_history_avg)
-        
-        df_summary = pd.DataFrame(raw_data_current).groupby("direction").mean().reset_index()
+        df_summary = pd.DataFrame(raw_data).groupby("direction").mean().reset_index()
         
         time_str = current_time.strftime('%H:%M')
         alert_message = f"⚠️ [Low-frequency-Pran] Heavy Cloud Alert (>50%) ({time_str})\n"
@@ -199,14 +152,10 @@ try:
                 alert_message += f"   [L: {low_val:.0f}%, M: {mid_val:.0f}%, H: {high_val:.0f}%]\n"
                 heavy_cloud_detected = True
 
-        alert_message += "----------------------------------\n"
-        alert_message += "📈 Past 5h Avg (Low/Mid/High):\n"
-        for _, r in df_history_avg.iterrows():
-            alert_message += f"• {int(r['hour'])}:00 -> {r['low']:.0f}% / {r['mid']:.0f}% / {r['high']:.0f}%\n"
-
         if heavy_cloud_detected:
             print("⚠️ Heavy cloud detected! Sending alert to LINE...", flush=True)
             send_line_push(alert_message)
+            # บันทึกทั้ง "วันที่" และ "ชั่วโมงปัจจุบัน" เพื่อให้ชั่วโมงถัดไปทำงานต่อได้ แต่ชั่วโมงเดิมห้ามเบิ้ล
             save_current_state({"last_alert_date": current_date_str, "last_alert_hour": current_hour})
         else:
             print("✅ Clouds are below threshold. No alert sent.", flush=True)
