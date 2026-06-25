@@ -18,7 +18,7 @@ TARGET_LON = 99.792917
 RADIUS_KM = 5.0
 
 # 🎯 เกณฑ์ความหนาของเมฆ (ใช้งานจริงตั้งไว้ที่ 50.0%)
-CLOUD_THRESHOLD = 0.0  
+CLOUD_THRESHOLD = 10.0  
 STATE_FILE = "cloud_radar_state.json"
 GRAPH_FILE = "cloud_history_5h.png"  # 👈 ชื่อไฟล์รูปกราฟที่จะบันทึก
 
