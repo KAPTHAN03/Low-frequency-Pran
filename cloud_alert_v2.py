@@ -17,7 +17,7 @@ TARGET_LON = 99.792917
 RADIUS_KM = 5.0
 
 # 🎯 เกณฑ์ความหนาของเมฆ (ใช้งานจริงตั้งไว้ที่ 50.0%)
-CLOUD_THRESHOLD = 50.0  
+CLOUD_THRESHOLD = 00.0  
 STATE_FILE = "cloud_radar_state.json"
 
 def send_line_push(message_text):
