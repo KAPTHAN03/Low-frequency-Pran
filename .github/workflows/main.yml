@@ -1,56 +1,40 @@
-name: Hourly Cloud Alert Bot
+name: Cloud Radar Bot Main Workflow
 
 on:
   schedule:
-    # รันทุกนาทีที่ 0 ของทุกชั่วโมง (เช่น 08:00, 09:00, 10:00 ...)
-    - cron: '0 * * * *'
-  workflow_dispatch:
-    # เปิดให้คุณสามารถกดปุ่ม "Run workflow" ด้วยมือเพื่อทดสอบระบบได้ตลอดเวลา
+    - cron: '0 0-12 * * *' # รันทุกต้นชั่วโมง (เวลา UTC 00:00-12:00 ตรงกับเวลาไทย 07:00-19:00 น.)
+  workflow_dispatch: # เปิดให้กดรันเองแบบ Manual ได้ด้วย
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
 
-    permissions:
-      # มอบสิทธิ์ให้บอทสามารถเขียนไฟล์ cloud_radar_state.json กลับเข้า Repository ได้
-      contents: write
-
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip'
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests numpy pandas geopy
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Run Cloud Alert Script
+      # ขั้นตอนนี้จะดึงไฟล์ JSON สถานะล่าสุดกลับมา เพื่อไม่ให้บอทส่งแจ้งเตือนเบิ้ลในชั่วโมงเดิม
+      - name: Create state file if not exists
         run: |
-          python cloud_alert_v2.py
+          if [ ! -f cloud_radar_state.json ]; then echo '{"last_alert_date": "", "last_alert_hour": -1}' > cloud_radar_state.json; fi
 
-      - name: Commit and Push State File
+      - name: Run Cloud Radar Bot
+        run: python cloud_alert_v2.py
+
+      # เซฟสถานะการแจ้งเตือนกลับเข้าสู่ระบบ GitHub หลังจากรันเสร็จ
+      - name: Commit and Push state changes
         run: |
-          # ตั้งค่าตัวตนของ Actions Bot สำหรับการ Commit
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # ตรวจสอบว่าไฟล์จำสถานะมีอยู่จริงและมีการเปลี่ยนแปลงหรือไม่
-          if [ -f cloud_radar_state.json ]; then
-            git add cloud_radar_state.json
-            # ถ้ามีการเปลี่ยนแปลงจะทำการ Commit และ Push กลับขึ้น GitHub ทันที
-            if ! git diff-index --quiet HEAD --; then
-              git commit -m "🤖 [Automated] Update hourly cloud radar state [Skip CI]"
-              git push
-              echo "💾 State file pushed to repository successfully."
-            else
-              echo "✅ No state changes detected. Skipped push."
-            fi
-          else
-            echo "⚠️ cloud_radar_state.json not found. Nothing to commit."
-          fi
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Action"
+          git add cloud_radar_state.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "💾 Update bot state memory" && git push)
