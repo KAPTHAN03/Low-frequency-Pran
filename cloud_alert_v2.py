@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from geopy.distance import geodesic
 
-# บังคับให้ matplotlib ใช้ Backend แบบไม่แสดงหน้าจอ (เซฟเป็นรูปภาพอย่างเดียว)
+# บังคับให้ matplotlib ใช้ Backend แบบไม่แสดงหน้าจอ (เซฟเป็นรูปภาพอย่างเดียว ป้องกัน Error บน GitHub)
 import matplotlib
 matplotlib.use('Agg')  
 import matplotlib.pyplot as plt
@@ -172,7 +172,7 @@ try:
         df_all = pd.DataFrame(raw_data_all_hours)
         df_history_avg = df_all.groupby("hour")[["low", "mid", "high"]].mean().reset_index()
         
-        # สร้างกราฟและเซฟไฟล์เป็นรูปภาพ
+        # สร้างกราฟและเซฟไฟล์เป็นรูปภาพไว้ในโฟลเดอร์ทำงานบนเซิร์ฟเวอร์
         generate_and_save_graph(df_history_avg)
         
         df_summary = pd.DataFrame(raw_data_current).groupby("direction").mean().reset_index()
